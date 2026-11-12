@@ -335,34 +335,43 @@ public class ServiceManagerTask : DeploymentTaskProviderBase
         var action = ctx.Param("action") ?? "restart";
         if (action is not ("restart" or "stop" or "start")) errors.Add(Error($"Unknown action '{action}'. Use start, stop or restart."));
         if (ctx.Param("maxwait") is { } w && (!int.TryParse(w, out var s) || s < 1 || s > 3600)) errors.Add(Error("Max wait must be between 1 and 3600 seconds"));
-        if (ctx.Param("servicename") is { } n && IsAgentService(n) && action != "start")
-            errors.Add(Error($"Refusing to {action} the {AgentServiceName} service: it is running this task."));
         if (!OperatingSystem.IsWindows()) errors.Add(Error("Service control is only implemented on Windows."));
     }
+
+    /// <summary>
+    /// Stopping the agent's own service would end the certificate request before its result is saved, so the request would
+    /// run again on every start. The stop is skipped and the task completes with this warning instead.
+    /// </summary>
+    public static string SkippedAgentStopMessage(string action) =>
+        $"Skipped: did not {action} the {AgentServiceName} service, because it is running this certificate request and stopping it would end the request before its result is saved. Restart it manually if needed.";
 
     public override async Task<ActionResult> ExecuteAsync(DeploymentContext ctx, CancellationToken ct)
     {
         if (!OperatingSystem.IsWindows()) return Fail(ctx, "Service control is only implemented on Windows.");
         var name = ctx.Param("servicename")!.Trim();
         var action = ctx.Param("action") ?? "restart";
+        var stops = action != "start";
+        if (stops && IsAgentService(name))
+            return ctx.IsPreviewOnly ? Preview(ctx, SkippedAgentStopMessage(action)) : Warn(ctx, SkippedAgentStopMessage(action));
         if (ctx.IsPreviewOnly) return Preview(ctx, $"Would {action} service '{name}'");
         var wait = TimeSpan.FromSeconds(Math.Clamp(ctx.ParamInt("maxwait") ?? 60, 1, 3600));
         try
         {
-            var status = await Task.Run(() => OperatingSystem.IsWindows() ? Control(ctx, name, action, wait) : throw new PlatformNotSupportedException(), ct);
-            return Ok(ctx, $"Service {name}: {action} completed ({status})");
+            var (status, skipped) = await Task.Run(() => OperatingSystem.IsWindows() ? Control(ctx, name, action, wait) : throw new PlatformNotSupportedException(), ct);
+            return skipped ? Warn(ctx, SkippedAgentStopMessage(action)) : Ok(ctx, $"Service {name}: {action} completed ({status})");
         }
         catch (InvalidOperationException ex) { return Fail(ctx, $"Could not {action} service '{name}': {ex.InnerException?.Message ?? ex.Message}"); }
         catch (System.ServiceProcess.TimeoutException) { return Fail(ctx, $"Service '{name}' did not reach the expected state within {wait.TotalSeconds:0}s"); }
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static string Control(DeploymentContext ctx, string name, string action, TimeSpan wait)
+    private static (string Status, bool SkippedAgentStop) Control(DeploymentContext ctx, string name, string action, TimeSpan wait)
     {
         using var sc = new ServiceController(name);
         _ = sc.Status; // throws InvalidOperationException when the service does not exist
+        // The name given may be a display name or differ in case from the agent's; check the resolved service too.
         if (action != "start" && (IsAgentService(sc.ServiceName) || IsAgentService(sc.DisplayName)))
-            throw new InvalidOperationException($"Refusing to {action} the {AgentServiceName} service: it is running this task.");
+            return (sc.Status.ToString(), true);
         if (action is "stop" or "restart" && sc.Status != ServiceControllerStatus.Stopped)
         {
             ctx.Log.Info($"Stopping service {sc.ServiceName}");
@@ -380,7 +389,7 @@ public class ServiceManagerTask : DeploymentTaskProviderBase
             }
         }
         sc.Refresh();
-        return sc.Status.ToString();
+        return (sc.Status.ToString(), false);
     }
 }
 

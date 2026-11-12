@@ -115,6 +115,13 @@ public abstract class DeploymentTaskProviderBase : IDeploymentTaskProvider
         return ActionResult.Ok(message);
     }
 
+    /// <summary>Logs and returns a completed-with-warning result (the task did not fail, but needs attention).</summary>
+    protected static ActionResult Warn(DeploymentContext ctx, string message)
+    {
+        ctx.Log.Warn(message);
+        return ActionResult.Warn(message);
+    }
+
     /// <summary>
     /// Runs the task body, turning expected failures (I/O, access denied, SSH/network, crypto, cloud API errors) into a
     /// failed <see cref="ActionResult"/> with a readable message instead of an exception. Cancellation is rethrown.

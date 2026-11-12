@@ -97,6 +97,8 @@ public partial class CertManager
 
         var errors = Validate(item);
         if (errors.Count > 0) return new ActionResult<ManagedCertificate> { Message = string.Join(" ", errors) };
+        // The running request saves its own copy of the item when it finishes, which would overwrite these changes.
+        if (IsRequestInProgress(item.Id)) return new ActionResult<ManagedCertificate> { Message = RequestInProgressMessage("saved") };
 
         // Preserve status fields owned by the engine.
         var existing = await _store.GetAsync<ManagedCertificate>(ItemsCollection, item.Id);
@@ -119,11 +121,16 @@ public partial class CertManager
         return new ActionResult<ManagedCertificate> { IsSuccess = true, Message = "Saved", Result = item };
     }
 
+    /// <summary>Deletes an item. Throws while a request for it is running, because the request would save the item again when it finishes.</summary>
     public async Task<bool> DeleteManagedCertificateAsync(string id)
     {
+        if (IsRequestInProgress(id)) throw new InvalidOperationException(RequestInProgressMessage("deleted"));
         var deleted = await _store.DeleteAsync(ItemsCollection, id);
         return deleted;
     }
+
+    internal static string RequestInProgressMessage(string what) =>
+        $"A certificate request is in progress for this certificate, so it can't be {what} now: the request would overwrite the change when it finishes. Try again once the request has completed.";
 
     private static List<string> Validate(ManagedCertificate item)
     {
@@ -248,14 +255,17 @@ public partial class CertManager
         var result = new CertificateRequestResult { ManagedItem = item };
         var previousStatus = item.LastRenewalStatus;
         var cancelled = false;
+        var taskWarning = false;
+        var tasksFailed = false;
         try
         {
             await Report(item, RequestState.Running, $"Beginning certificate request for {item.Name}", log);
             item.DateLastRenewalAttempt = DateTimeOffset.UtcNow;
 
             // Pre-request tasks
-            var preOk = await RunTasksAsync(item, item.PreRequestTasks, null, null, log, false, cts.Token);
-            if (!preOk) throw new InvalidOperationException("A pre-request task failed.");
+            var pre = await RunTasksAsync(item, item.PreRequestTasks, null, null, log, false, cts.Token);
+            if (pre == TaskListOutcome.Failed) throw new InvalidOperationException("A pre-request task failed.");
+            taskWarning = pre == TaskListOutcome.Warning;
 
             var chain = await PerformAcmeOrderAsync(item, log, cts.Token);
             await SaveCertificateAsync(item, chain.cert, chain.key, chain.chain, chain.ariId, log);
@@ -298,18 +308,24 @@ public partial class CertManager
         try
         {
             // Post-request tasks run according to their triggers
-            var tasksOk = await RunTasksAsync(item, item.PostRequestTasks, result.IsSuccess, result.Message, log, false, cts.Token);
-            if (!tasksOk && result.IsSuccess)
+            var post = await RunTasksAsync(item, item.PostRequestTasks, result.IsSuccess, result.Message, log, false, cts.Token);
+            if (post == TaskListOutcome.Failed && result.IsSuccess)
             {
+                tasksFailed = true;
                 item.LastRenewalStatus = RequestState.Warning;
                 result.Message += " (one or more deployment tasks failed)";
+            }
+            else if ((taskWarning || post == TaskListOutcome.Warning) && result.IsSuccess)
+            {
+                item.LastRenewalStatus = RequestState.Warning;
+                result.Message += " (one or more deployment tasks reported a warning)";
             }
             await SendWebhookAsync(item, result, log);
         }
         catch (Exception ex) { log.Error("Post-request processing failed: " + ex.Message); }
         finally
         {
-            try { await SendNotificationAsync(item, previousStatus, cancelled, result.Message, log); }
+            try { await SendNotificationAsync(item, previousStatus, cancelled, tasksFailed, result.Message, log); }
             catch (Exception ex) { log.Warn("Notification failed: " + ex.Message); }
 
             RefreshHealth(item);
@@ -562,10 +578,14 @@ public partial class CertManager
         log.Info($"Certificate saved to {files.Folder}. Thumbprint {leaf.Thumbprint}, expires {leaf.NotAfter:u}");
     }
 
-    private async Task<bool> RunTasksAsync(ManagedCertificate item, List<DeploymentTaskConfig> tasks, bool? requestOk, string? message,
+    /// <summary>Overall outcome of a task list: all OK, completed with at least one warning, or at least one failure.</summary>
+    internal enum TaskListOutcome { Ok, Warning, Failed }
+
+    private async Task<TaskListOutcome> RunTasksAsync(ManagedCertificate item, List<DeploymentTaskConfig> tasks, bool? requestOk, string? message,
         ItemLog log, bool previewOnly, CancellationToken ct, string? onlyTaskId = null)
     {
         var allOk = true;
+        var anyWarning = false;
         var prefs = await GetPreferencesAsync();
         var pfxPassword = item.CertificatePasswordCredentialId != null
             ? (await _credentials.GetUnlockedCredentialsDictionaryAsync(item.CertificatePasswordCredentialId)).GetValueOrDefault("password") : null;
@@ -616,20 +636,23 @@ public partial class CertManager
                 }
             }
 
+            var warning = r.IsSuccess && r.IsWarning;
             if (!previewOnly)
             {
                 task.DateLastExecuted = DateTimeOffset.UtcNow;
-                task.LastRunStatus = r.IsSuccess ? RequestState.Success : RequestState.Error;
+                task.LastRunStatus = !r.IsSuccess ? RequestState.Error : warning ? RequestState.Warning : RequestState.Success;
                 task.LastResult = r.Message;
             }
-            await Report(item, r.IsSuccess ? RequestState.Running : RequestState.Error, $"Task '{task.TaskName}': {r.Message}", log);
+            await Report(item, r.IsSuccess ? RequestState.Running : RequestState.Error,
+                $"Task '{task.TaskName}'{(warning ? " completed with a warning" : "")}: {r.Message}", log);
+            if (warning) anyWarning = true;
             if (!r.IsSuccess)
             {
                 allOk = false; previousFailed = true;
                 if (task.IsFatalOnError && onlyTaskId == null) { log.Error($"Task {task.TaskName} is fatal on error; stopping task list."); break; }
             }
         }
-        return allOk;
+        return !allOk ? TaskListOutcome.Failed : anyWarning ? TaskListOutcome.Warning : TaskListOutcome.Ok;
     }
 
     private async Task SendWebhookAsync(ManagedCertificate item, CertificateRequestResult result, ItemLog log)
@@ -656,13 +679,16 @@ public partial class CertManager
     {
         var item = await _store.GetAsync<ManagedCertificate>(ItemsCollection, id);
         if (item == null) return ActionResult.Fail("Managed certificate not found");
+        if (!previewOnly && IsRequestInProgress(id)) return ActionResult.Fail(RequestInProgressMessage("updated by running a task"));
         var log = new ItemLog(_paths, id, _logger);
         var tasks = item.PreRequestTasks.Concat(item.PostRequestTasks).ToList();
         if (tasks.All(t => t.Id != taskId)) return ActionResult.Fail("Task not found");
-        var ok = await RunTasksAsync(item, tasks, null, null, log, previewOnly, CancellationToken.None, taskId);
+        var outcome = await RunTasksAsync(item, tasks, null, null, log, previewOnly, CancellationToken.None, taskId);
         if (!previewOnly) await _store.UpsertAsync(ItemsCollection, item.Id, item);
         var task = tasks.First(t => t.Id == taskId);
-        return new ActionResult(ok, task.LastResult ?? (ok ? "Task completed" : "Task failed"));
+        var ok = outcome != TaskListOutcome.Failed;
+        var fallback = outcome switch { TaskListOutcome.Ok => "Task completed", TaskListOutcome.Warning => "Task completed with a warning", _ => "Task failed" };
+        return new ActionResult(ok, task.LastResult ?? fallback) { IsWarning = outcome == TaskListOutcome.Warning };
     }
 
     // ---------- Test configuration ----------

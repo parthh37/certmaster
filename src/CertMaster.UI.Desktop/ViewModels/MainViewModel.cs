@@ -231,7 +231,8 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedItem == null) { Editor = null; return; }
         if (MessageBox.Show($"Delete '{SelectedItem.Name}'?\n\nIssued certificate files and bindings are not removed.", "Delete", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        await _client.DeleteManagedCertificateAsync(SelectedItem.Id);
+        try { await _client.DeleteManagedCertificateAsync(SelectedItem.Id); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Delete failed", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         SelectedItem = null; Editor = null;
         await RefreshAsync();
     }
@@ -286,7 +287,8 @@ public partial class MainViewModel : ObservableObject
         if (SelectedItem == null) { MessageBox.Show("Save the certificate first."); return; }
         if (MessageBox.Show($"Run task '{task.TaskName}' now?", "Run task", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         var r = await _client.PerformDeploymentTaskAsync(SelectedItem.Id, task.Model.Id, false);
-        MessageBox.Show(r.Message, task.TaskName, MessageBoxButton.OK, r.IsSuccess ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        MessageBox.Show(r.Message, task.TaskName, MessageBoxButton.OK,
+            !r.IsSuccess ? MessageBoxImage.Error : r.IsWarning ? MessageBoxImage.Warning : MessageBoxImage.Information);
     }
 
     [RelayCommand]

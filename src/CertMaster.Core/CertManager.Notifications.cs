@@ -10,13 +10,15 @@ public partial class CertManager
 {
     /// <summary>
     /// Which notification (if any) a finished request should send. Failures notify every attempt (the retry back-off keeps
-    /// this to a few a day); a success only notifies when it follows a failure.
+    /// this to a few a day); a success only notifies when it follows a failure. A Warning status alone (a task that only
+    /// reported a warning) is not a failure: only <paramref name="tasksFailed"/> turns it into an alert.
     /// </summary>
-    public static string? GetNotificationEvent(RequestState previous, RequestState current, bool cancelled) => current switch
+    public static string? GetNotificationEvent(RequestState previous, RequestState current, bool cancelled, bool tasksFailed = false) => current switch
     {
         _ when cancelled => null,
         RequestState.Error => NotificationEvents.RequestFailed,
-        RequestState.Warning => NotificationEvents.DeploymentTasksFailed,
+        RequestState.Warning when tasksFailed => NotificationEvents.DeploymentTasksFailed,
+        RequestState.Warning => null,
         RequestState.Success when previous is RequestState.Error or RequestState.Warning => NotificationEvents.Recovered,
         _ => null,
     };
@@ -42,10 +44,10 @@ public partial class CertManager
         };
     }
 
-    private async Task SendNotificationAsync(ManagedCertificate item, RequestState previous, bool cancelled, string? message, ItemLog log)
+    private async Task SendNotificationAsync(ManagedCertificate item, RequestState previous, bool cancelled, bool tasksFailed, string? message, ItemLog log)
     {
         if (!item.RequestConfig.EnableFailureNotifications) return;
-        var evt = GetNotificationEvent(previous, item.LastRenewalStatus, cancelled);
+        var evt = GetNotificationEvent(previous, item.LastRenewalStatus, cancelled, tasksFailed);
         if (evt == null) return;
         var url = (await GetPreferencesAsync()).NotificationWebhookUrl;
         if (string.IsNullOrWhiteSpace(url)) return;

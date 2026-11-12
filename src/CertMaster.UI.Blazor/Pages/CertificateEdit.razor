@@ -461,7 +461,7 @@
         try
         {
             var r = await Hub.RunTaskAsync(InstanceId, Id, task.Id);
-            Snackbar.Add($"{task.TaskName}: {r.Message}", r.IsSuccess ? Severity.Success : Severity.Warning);
+            Snackbar.Add($"{task.TaskName}: {r.Message}", !r.IsSuccess ? Severity.Error : r.IsWarning ? Severity.Warning : Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
     }
@@ -535,7 +535,7 @@
                         }
                         @if (task.LastResult != null)
                         {
-                            <MudItem xs="12"><MudAlert Dense="true" Severity="@(task.LastRunStatus == RequestState.Success ? Severity.Success : Severity.Warning)">Last result: @task.LastResult</MudAlert></MudItem>
+                            <MudItem xs="12"><MudAlert Dense="true" Severity="@(task.LastRunStatus switch { RequestState.Success => Severity.Success, RequestState.Error => Severity.Error, _ => Severity.Warning })">Last result: @task.LastResult</MudAlert></MudItem>
                         }
                     </MudGrid>
                     <MudStack Row="true" Class="mt-2">

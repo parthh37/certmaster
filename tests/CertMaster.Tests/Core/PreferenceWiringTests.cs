@@ -72,16 +72,17 @@ public class KeyTypeDefaultTests
 public class NotificationEventTests
 {
     [Theory]
-    [InlineData(RequestState.NotRunning, RequestState.Error, false, NotificationEvents.RequestFailed)]
-    [InlineData(RequestState.Error, RequestState.Error, false, NotificationEvents.RequestFailed)]
-    [InlineData(RequestState.Success, RequestState.Warning, false, NotificationEvents.DeploymentTasksFailed)]
-    [InlineData(RequestState.Error, RequestState.Success, false, NotificationEvents.Recovered)]
-    [InlineData(RequestState.Warning, RequestState.Success, false, NotificationEvents.Recovered)]
-    [InlineData(RequestState.Success, RequestState.Success, false, null)]
-    [InlineData(RequestState.NotRunning, RequestState.Success, false, null)]
-    [InlineData(RequestState.NotRunning, RequestState.Error, true, null)]
-    public void PicksEvent(RequestState previous, RequestState current, bool cancelled, string? expected) =>
-        Assert.Equal(expected, CertManager.GetNotificationEvent(previous, current, cancelled));
+    [InlineData(RequestState.NotRunning, RequestState.Error, false, false, NotificationEvents.RequestFailed)]
+    [InlineData(RequestState.Error, RequestState.Error, false, false, NotificationEvents.RequestFailed)]
+    [InlineData(RequestState.Success, RequestState.Warning, false, true, NotificationEvents.DeploymentTasksFailed)]
+    [InlineData(RequestState.Success, RequestState.Warning, false, false, null)] // a task warning is not a failure
+    [InlineData(RequestState.Error, RequestState.Success, false, false, NotificationEvents.Recovered)]
+    [InlineData(RequestState.Warning, RequestState.Success, false, false, NotificationEvents.Recovered)]
+    [InlineData(RequestState.Success, RequestState.Success, false, false, null)]
+    [InlineData(RequestState.NotRunning, RequestState.Success, false, false, null)]
+    [InlineData(RequestState.NotRunning, RequestState.Error, true, false, null)]
+    public void PicksEvent(RequestState previous, RequestState current, bool cancelled, bool tasksFailed, string? expected) =>
+        Assert.Equal(expected, CertManager.GetNotificationEvent(previous, current, cancelled, tasksFailed));
 }
 
 public sealed class NotificationDeliveryTests : IDisposable

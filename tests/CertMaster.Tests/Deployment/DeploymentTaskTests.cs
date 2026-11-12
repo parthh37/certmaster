@@ -129,15 +129,25 @@ public class DeploymentTaskTests : IDisposable
         Assert.Contains(steps, s => s.HasError && s.Title.Contains("not a folder"));
     }
 
-    [Fact]
-    public async Task Service_manager_refuses_to_stop_the_agent()
+    [Theory]
+    [InlineData("restart")]
+    [InlineData("stop")]
+    public async Task Service_manager_skips_stopping_the_agent_with_a_warning(string action)
     {
+        if (!OperatingSystem.IsWindows()) return;
         using var chain = new TestChain(_dir.Combine("c"));
         var p = Provider("CertMaster.Deploy.ServiceManager");
-        var steps = await p.ValidateAsync(Ctx.Create(p, chain.Files, new() { ["servicename"] = "certmaster agent", ["action"] = "restart" }));
-        Assert.Contains(steps, s => s.HasError && s.Title.Contains("Refusing"));
-        var start = await p.ValidateAsync(Ctx.Create(p, chain.Files, new() { ["servicename"] = "CertMaster Agent", ["action"] = "start" }));
-        Assert.DoesNotContain(start, s => s.Title.Contains("Refusing"));
+        var ctx = Ctx.Create(p, chain.Files, new() { ["servicename"] = "certmaster agent", ["action"] = action });
+        // Valid configuration: the task is not an error, it just won't stop the agent.
+        Assert.DoesNotContain(await p.ValidateAsync(ctx), s => s.HasError);
+
+        var r = await p.ExecuteAsync(ctx, CancellationToken.None);
+        Assert.True(r.IsSuccess);
+        Assert.True(r.IsWarning);
+        Assert.Contains("Skipped", r.Message);
+
+        var preview = await p.ExecuteAsync(Ctx.Create(p, chain.Files, new() { ["servicename"] = "CertMaster Agent", ["action"] = action }, preview: true), CancellationToken.None);
+        Assert.Contains("Skipped", preview.Message);
     }
 
     [Fact]
