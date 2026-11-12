@@ -6,6 +6,8 @@
 #define ServiceName "CertMaster Agent"
 #define AppExe "CertMaster.UI.Desktop.exe"
 #define ServiceExe "CertMaster.Server.Core.exe"
+#define TrayExe "CertMaster.UI.Tray.exe"
+#define TrayRunValue "CertMaster Tray"
 
 [Setup]
 AppId={{6C1C8F7E-3E0B-4C2B-9C1E-5D2F0B7A9A11}
@@ -48,20 +50,29 @@ Name: "desktop"; Description: "CertMaster desktop app"; Types: full
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Components: desktop
+Name: "trayautostart"; Description: "Start the CertMaster tray monitor when users sign in"; Components: desktop
 
 [Files]
 Source: "..\dist\agent\Service\*"; DestDir: "{app}\Service"; Components: agent; Flags: ignoreversion recursesubdirs createallsubdirs
 ; WPF needs the Desktop Experience: on Server Core only the service is installed.
+; UI.Desktop also holds the tray monitor (CertMaster.UI.Tray.exe), which shares the desktop runtime files.
 Source: "..\dist\agent\UI.Desktop\*"; DestDir: "{app}\UI.Desktop"; Components: desktop; Check: not IsServerCore; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\CertMaster"; Filename: "{app}\UI.Desktop\{#AppExe}"; Components: desktop; Check: not IsServerCore
+Name: "{autoprograms}\CertMaster Tray Monitor"; Filename: "{app}\UI.Desktop\{#TrayExe}"; Components: desktop; Check: not IsServerCore
 Name: "{autodesktop}\CertMaster"; Filename: "{app}\UI.Desktop\{#AppExe}"; Tasks: desktopicon; Check: not IsServerCore
+
+[Registry]
+; Tray monitor for every user at sign-in (unelevated). Each user can switch it off from the tray menu (stored in HKCU).
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#TrayRunValue}"; \
+  ValueData: """{app}\UI.Desktop\{#TrayExe}"" --autostart"; Components: desktop; Tasks: trayautostart; Check: not IsServerCore; Flags: uninsdeletevalue
 
 [Run]
 ; The service itself is created, configured and started from [Code] (ssPostInstall), so the order is guaranteed and failures are logged.
 Filename: "{app}\UI.Desktop\{#AppExe}"; Description: "Launch CertMaster"; Components: desktop; Check: not IsServerCore; Flags: postinstall skipifsilent nowait shellexec
+Filename: "{app}\UI.Desktop\{#TrayExe}"; Description: "Show the tray monitor now"; Components: desktop; Tasks: trayautostart; Check: not IsServerCore; Flags: postinstall skipifsilent nowait runasoriginaluser
 
 [Code]
 const DataFolder = '{commonappdata}\CertMaster';
@@ -113,16 +124,20 @@ procedure ConfigureService();
 var BinPath: String; Code: Integer;
 begin
   BinPath := ExpandConstant('{app}\Service\{#ServiceExe}');
+  { Automatic (not delayed) start: renewals run from boot, before and without anyone signing in. Depends on the TCP/IP
+    stack and http.sys (used by the http-01 challenge listener); network calls that fail early are retried. }
   if ServiceExists() then
-    Code := Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem')
+    Code := Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= auto depend= Tcpip/HTTP obj= LocalSystem')
   else
-    Code := Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem DisplayName= "{#ServiceName}"');
+    Code := Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= auto depend= Tcpip/HTTP obj= LocalSystem DisplayName= "{#ServiceName}"');
   if Code <> 0 then
   begin
     if not WizardSilent() then
       MsgBox('The CertMaster Agent service could not be registered (sc.exe exit code ' + IntToStr(Code) + '). See the setup log for details.', mbError, MB_OK);
     exit;
   end;
+  { Earlier versions used delayed start; clear the flag so an upgraded service also starts at boot. }
+  RegWriteDWordValue(HKLM, 'SYSTEM\CurrentControlSet\Services\{#ServiceName}', 'DelayedAutostart', 0);
   Sc('description "{#ServiceName}" "Requests, renews and deploys TLS certificates (CertMaster)"');
   { Restart after a crash or a non-zero exit (failureflag 1), at 1 min, 1 min, then every 5 min; the counter resets daily. }
   Sc('failure "{#ServiceName}" reset= 86400 actions= restart/60000/restart/60000/restart/300000');
@@ -136,25 +151,37 @@ begin
       'Check ' + ExpandConstant(DataFolder) + '\logs\service.log and the Application event log.', mbError, MB_OK);
 end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
+{ Closes the desktop app and every user's tray monitor so their files can be replaced or removed. }
+procedure CloseDesktopApps();
 var Code: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#AppExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#TrayExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
   begin
     StopService();
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#AppExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    CloseDesktopApps();
   end;
-  if CurStep = ssPostInstall then ConfigureService();
+  if CurStep = ssPostInstall then
+  begin
+    ConfigureService();
+    { An upgrade where the tray task was unticked: remove the sign-in entry an earlier install created. }
+    if not WizardIsTaskSelected('trayautostart') then
+      RegDeleteValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#TrayRunValue}');
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var Code: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
     { Before files are removed: stop the service, wait for it, then delete it. }
     StopService();
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#AppExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    CloseDesktopApps();
     if ServiceExists() then Sc('delete "{#ServiceName}"');
   end;
   if CurUninstallStep = usPostUninstall then

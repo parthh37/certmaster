@@ -58,7 +58,7 @@ Download the installers from [Releases](https://github.com/parthh37/certmaster/r
 
 | Installer | Installs |
 |---|---|
-| `certmaster-windows-x64-<version>.exe` | The **CertMaster Agent** service and the desktop app (optional component). The desktop app runs as Administrator. |
+| `certmaster-windows-x64-<version>.exe` | The **CertMaster Agent** service, plus the desktop app and tray monitor (optional component). The desktop app runs as Administrator; the tray monitor doesn't need to. |
 | `certmaster-hub-windows-x64-<version>.exe` | The **CertMaster Management Hub** service. The setup asks for the port (default 9697) and can open the firewall. |
 
 Both are self-contained (no .NET install needed) and support Windows 10 / Server 2019 or later.
@@ -79,9 +79,20 @@ CertMaster supports Windows Server 2019, 2022 and 2025, with Desktop Experience 
 agent installer installs only the service (the desktop app needs WPF), and you manage the server from a Management Hub.
 Silent installs work: `certmaster-windows-x64-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=setup.log`.
 
-**Services.** Both services run as LocalSystem with delayed automatic start. If a service crashes or stops with an
-error, Windows restarts it after 1 minute, again after 1 minute, then every 5 minutes; the failure count resets daily.
-On shutdown a running certificate request gets up to 60 seconds to finish. Upgrades wait for it before replacing files.
+**Services.** Both services run as LocalSystem with automatic start. They start when Windows boots, before anyone
+signs in, and keep running when nobody is signed in. The desktop app and the tray monitor only display status; nothing
+depends on them running. If a service crashes or stops with an error, Windows restarts it after 1 minute, again after
+1 minute, then every 5 minutes; the failure count resets daily. On shutdown a running certificate request gets up to
+60 seconds to finish. Upgrades wait for it before replacing files.
+
+**Tray monitor.** With the desktop component installed, a CertMaster icon appears in the notification area when a user
+signs in. Its colour shows the overall status: green (all healthy), amber (expiring soon or a warning), red (a renewal
+failed, or the agent service is stopped) or grey (the agent isn't answering yet). The icon is in the taskbar's overflow
+(^) until you drag it out. A notification appears when the agent or hub service stops or starts again, when a
+renewal fails, when a certificate gets within 14 days of expiry, and when failures clear. The menu opens CertMaster or
+the Management Hub, and starts, stops or restarts either service (one UAC prompt). Each user can turn **Start when I sign
+in** off for themselves. The tray runs without elevation. It reads `/api/system/summary`, a read-only endpoint that
+answers loopback callers without the API key and returns certificate names, counts and expiry dates only.
 
 **Monitoring.** Each service logs to `C:\ProgramData\CertMaster\logs\service.log` (hub: `...\CertMasterHub\logs\hub.log`).
 Logs roll daily or at 50 MB, and 31 files are kept. Warnings and errors also go to the Windows **Application** event
@@ -137,6 +148,7 @@ Run the services locally with isolated data folders. `CERTMASTER_DATA`, `CERTMAS
 $env:CERTMASTER_DATA="$PWD\.data\agent"; dotnet run --project src/CertMaster.Server.Core       # agent on 127.0.0.1:9696
 $env:CERTMASTER_HUB_DATA="$PWD\.data\hub"; dotnet run --project src/CertMaster.Server.Hub      # hub on http://localhost:9697
 $env:CERTMASTER_DATA="$PWD\.data\agent"; dotnet run --project src/CertMaster.UI.Desktop
+$env:CERTMASTER_AGENT_URL="http://127.0.0.1:9696"; dotnet run --project src/CertMaster.UI.Tray                # tray monitor
 ```
 
 ### End-to-end test with Pebble

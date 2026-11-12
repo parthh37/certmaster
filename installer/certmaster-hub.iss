@@ -156,16 +156,20 @@ begin
     Log('Could not write appsettings.Installer.json');
 
   BinPath := ExpandConstant('{app}\Service\{#ServiceExe}');
+  { Automatic (not delayed) start: the hub runs from boot, before and without anyone signing in. It waits for the TCP/IP
+    stack; a bind failure (address not assigned yet) exits non-zero and the recovery actions retry it. }
   if ServiceExists() then
-    Code := Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem')
+    Code := Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= auto depend= Tcpip obj= LocalSystem')
   else
-    Code := Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem DisplayName= "{#ServiceName}"');
+    Code := Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= auto depend= Tcpip obj= LocalSystem DisplayName= "{#ServiceName}"');
   if Code <> 0 then
   begin
     if not WizardSilent() then
       MsgBox('The Management Hub service could not be registered (sc.exe exit code ' + IntToStr(Code) + '). See the setup log for details.', mbError, MB_OK);
     exit;
   end;
+  { Earlier versions used delayed start; clear the flag so an upgraded service also starts at boot. }
+  RegWriteDWordValue(HKLM, 'SYSTEM\CurrentControlSet\Services\{#ServiceName}', 'DelayedAutostart', 0);
   Sc('description "{#ServiceName}" "Web UI and API for managing certificates across CertMaster agents"');
   { Restart after a crash or a non-zero exit (failureflag 1), at 1 min, 1 min, then every 5 min; the counter resets daily. }
   Sc('failure "{#ServiceName}" reset= 86400 actions= restart/60000/restart/60000/restart/300000');

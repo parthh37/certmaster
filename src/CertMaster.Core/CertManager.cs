@@ -178,6 +178,8 @@ public partial class CertManager
 
     public bool IsRequestInProgress(string id) => _running.ContainsKey(id);
 
+    public int RequestsInProgressCount => _running.Count;
+
     // ---------- Challenge selection helpers ----------
 
     public static CertRequestChallengeConfig SelectChallengeConfig(ManagedCertificate item, string domain)
