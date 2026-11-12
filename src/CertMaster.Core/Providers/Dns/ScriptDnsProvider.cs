@@ -21,24 +21,37 @@ public class ScriptDnsProvider : DnsProviderBase
         }
     };
 
+    private static string? ScriptPath(DnsProviderContext ctx, string key) =>
+        ctx.Param(key)?.Trim().Trim('"') is { Length: > 0 } p ? p : null;
+
     public override Task<ActionResult> TestAsync(DnsProviderContext ctx)
     {
-        var s = ctx.Param("createscript");
-        return Task.FromResult(s != null && File.Exists(s) ? ActionResult.Ok($"Create script found: {s}") : ActionResult.Fail($"Create script not found: {s}"));
+        var s = ScriptPath(ctx, "createscript");
+        if (s == null) return Task.FromResult(ActionResult.Fail("Create script path is not set."));
+        if (!File.Exists(s)) return Task.FromResult(ActionResult.Fail($"Create script not found: {s}. Check the path exists on the agent machine and is readable by the service account."));
+        var d = ScriptPath(ctx, "deletescript");
+        if (d != null && !File.Exists(d)) return Task.FromResult(ActionResult.Fail($"Delete script not found: {d}."));
+        return Task.FromResult(ActionResult.Ok($"Create script found: {s}"));
     }
 
     public override Task<ActionResult> CreateRecordAsync(DnsProviderContext ctx, string recordName, string value) =>
-        Run(ctx, ctx.Param("createscript"), recordName, value);
+        Run(ctx, ScriptPath(ctx, "createscript"), recordName, value);
 
     public override Task<ActionResult> DeleteRecordAsync(DnsProviderContext ctx, string recordName, string value) =>
-        ctx.Param("deletescript") == null ? Task.FromResult(ActionResult.Ok("No delete script configured")) : Run(ctx, ctx.Param("deletescript"), recordName, value);
+        ScriptPath(ctx, "deletescript") is { } d ? Run(ctx, d, recordName, value) : Task.FromResult(ActionResult.Ok("No delete script configured"));
 
-    private static async Task<ActionResult> Run(DnsProviderContext ctx, string? script, string recordName, string value)
+    private Task<ActionResult> Run(DnsProviderContext ctx, string? script, string recordName, string value) => Guard(async () =>
     {
         if (script == null) return ActionResult.Fail("Script path not set");
-        var domain = recordName.Replace("_acme-challenge.", "");
-        var r = await ProcessRunner.RunScriptAsync(script, new[] { recordName, value, ctx.ZoneId ?? "", domain }, null, TimeSpan.FromMinutes(5));
-        ctx.Log?.Info($"Script output: {r.Output.Trim()}");
-        return r.ExitCode == 0 ? ActionResult.Ok($"Script completed: {Path.GetFileName(script)}") : ActionResult.Fail($"Script exited with code {r.ExitCode}: {r.Error.Trim()}");
-    }
+        if (!File.Exists(script)) return ActionResult.Fail($"Script not found: {script}");
+        var name = DnsNames.Normalize(recordName);
+        // Only strip the leading label; "_acme-challenge." elsewhere in the name is part of the domain.
+        var domain = name.StartsWith("_acme-challenge.", StringComparison.Ordinal) ? name["_acme-challenge.".Length..] : name;
+        var r = await ProcessRunner.RunScriptAsync(script, new[] { name, value, ctx.ZoneId ?? "", domain }, null, TimeSpan.FromMinutes(5));
+        if (!string.IsNullOrWhiteSpace(r.Output)) ctx.Log?.Info($"Script output: {r.Output.Trim()}");
+        if (r.ExitCode != 0 && !string.IsNullOrWhiteSpace(r.Error)) ctx.Log?.Warn($"Script error output: {r.Error.Trim()}");
+        return r.ExitCode == 0
+            ? ActionResult.Ok($"Script completed: {Path.GetFileName(script)}")
+            : ActionResult.Fail($"Script {Path.GetFileName(script)} exited with code {r.ExitCode}: {DnsHttp.Truncate(r.Error, 500)}");
+    });
 }
