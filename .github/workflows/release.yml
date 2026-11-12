@@ -1,0 +1,122 @@
+# One-click release: Actions > release > Run workflow.
+# Bumps the version in Directory.Build.props, builds and tests, builds both installers, then commits the bump to
+# main, tags it and publishes a GitHub release with the installers attached. Nothing is pushed unless the build,
+# tests and installers all succeed.
+#
+# The tag is pushed with GITHUB_TOKEN, which does not start other workflows, so ci.yml does not build a second
+# release for it. Pushing a v* tag by hand still releases through ci.yml.
+name: release
+run-name: "Release: ${{ inputs.version != '' && inputs.version || format('{0} bump', inputs.bump) }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Exact version instead of a bump, e.g. 2.0.0 (leave blank to bump)
+        type: string
+        required: false
+        default: ''
+      prerelease:
+        description: Mark as a pre-release
+        type: boolean
+        default: false
+      draft:
+        description: Create as a draft (publish it later from the Releases page)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        shell: pwsh
+        run: |
+          Write-Error "Releases are cut from main. Run this workflow with 'Use workflow from: main' (got $env:GITHUB_REF)."
+          exit 1
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Bump version
+        id: ver
+        shell: pwsh
+        env:
+          BUMP: ${{ inputs.bump }}
+          VERSION: ${{ inputs.version }}
+        run: ./build/bump-version.ps1 -Bump $env:BUMP -Version $env:VERSION
+
+      - name: Build
+        run: dotnet build CertMaster.sln -c Release
+
+      - name: Test
+        run: dotnet test CertMaster.sln -c Release --no-build --logger "trx;LogFileName=results.trx"
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Publish and build installers
+        shell: pwsh
+        run: ./build/publish.ps1 -SkipTests
+
+      - name: Commit, tag and push
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props
+          git commit -m "Release $env:TAG"
+          git tag -a $env:TAG -m "CertMaster $env:VERSION"
+          # Fails (and releases nothing) if main moved while this ran; just run the workflow again.
+          git push origin "HEAD:refs/heads/main"
+          if ($LASTEXITCODE -ne 0) { throw "Push to main failed" }
+          git push origin "refs/tags/$env:TAG"
+          if ($LASTEXITCODE -ne 0) { throw "Tag push failed" }
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: CertMaster ${{ steps.ver.outputs.version }}
+          files: dist/installers/*.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ inputs.prerelease }}
+          draft: ${{ inputs.draft }}
+
+      - name: Summary
+        shell: pwsh
+        env:
+          PREVIOUS: ${{ steps.ver.outputs.previous }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          @(
+            "### CertMaster $env:VERSION released"
+            ""
+            "Version $env:PREVIOUS -> $env:VERSION, tag ``$env:TAG``."
+            ""
+            "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:TAG"
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8

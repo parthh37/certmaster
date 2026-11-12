@@ -11,6 +11,8 @@ to other services with deployment tasks, and manage many servers from one web-ba
 
 There are no license keys, evaluation limits or paid tiers. MIT licensed.
 
+Website: **https://parthh37.github.io/certmaster/**
+
 ## Features
 
 **Certificates**
@@ -99,6 +101,19 @@ admin rights.
 3. Add a custom CA `https://localhost:14000/dir` with *Allow untrusted TLS* enabled, then register an account.
 4. Request a certificate for `localhost` (http-01). For dns-01, use the custom-script provider calling the challenge
    test server's `/set-txt` and `/clear-txt` endpoints; any name works, wildcards included.
+
+## Releasing
+
+Go to **Actions > release > Run workflow** on `main` and pick a bump (`patch`, `minor`, `major`) or type an exact
+version. The workflow bumps `Version` in `Directory.Build.props`, builds, tests and builds both installers. Only
+then does it commit the bump to `main`, push the `v<version>` tag, and publish a GitHub release with the installers
+and generated release notes. Pre-release and draft are options on the same form.
+
+From a terminal: `gh workflow run release.yml -f bump=minor`. To bump locally instead, run
+`./build/bump-version.ps1 -Bump minor`, commit, and push a `v*` tag; `ci.yml` builds the release from the tag.
+
+The website in `site/` is published to GitHub Pages by `pages.yml` whenever `site/` changes on `main`. Its download
+buttons read the latest release from the GitHub API, so releases need no website change.
 
 ## Architecture
 
