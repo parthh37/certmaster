@@ -455,11 +455,26 @@ public partial class SettingsViewModel : ObservableObject
         await ReloadListsAsync();
     }
 
+    public List<Choice<string>> KeyTypes => Choices.KeyTypes;
+    public List<Choice<string>> RenewalModes => Choices.RenewalModes;
+
     [RelayCommand]
     private async Task SavePreferencesAsync()
     {
         var r = await _client.SetPreferencesAsync(Preferences);
         Message = r.Message ?? "";
+    }
+
+    [RelayCommand]
+    private async Task SendTestNotificationAsync()
+    {
+        Message = "Sending test notification...";
+        try
+        {
+            var r = await _client.SendTestNotificationAsync(Preferences.NotificationWebhookUrl);
+            Message = (r.IsSuccess ? "Test notification sent: " : "Test notification failed: ") + r.Message;
+        }
+        catch (Exception ex) { Message = "Test notification failed: " + ex.Message; }
     }
 
     [RelayCommand]

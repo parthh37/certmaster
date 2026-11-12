@@ -192,6 +192,7 @@
                             <ComboBox ItemsSource="{Binding Authorities}" DisplayMemberPath="Title" SelectedValuePath="Id" SelectedValue="{Binding Item.CertificateAuthorityId}" />
                             <mah:ToggleSwitch Content="Use staging (test) environment" IsOn="{Binding Item.UseStagingMode}" Margin="0,8,0,0" />
                             <mah:ToggleSwitch Content="Include in automatic renewal" IsOn="{Binding Item.IncludeInAutoRenew}" />
+                            <mah:ToggleSwitch Content="Send failure notifications (webhook in Settings)" IsOn="{Binding Config.EnableFailureNotifications}" />
                             <TextBlock Text="IP addresses (optional, one per line)" Style="{StaticResource FieldLabel}" />
                             <TextBox Text="{Binding IpText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="40" />
                         </StackPanel>

@@ -65,19 +65,30 @@ public class StoredCredential
     public string? Secret { get; set; }
 }
 
+public static class RenewalIntervalModes
+{
+    /// <summary>Renew when RenewalIntervalDays remain (short-lived certificates renew at one third of their lifetime).</summary>
+    public const string DaysBeforeExpiry = "DaysBeforeExpiry";
+    /// <summary>Renew once RenewalLifetimePercentage of the certificate lifetime has passed.</summary>
+    public const string PercentageOfLifetime = "PercentageOfLifetime";
+}
+
 public class Preferences
 {
     public int RenewalIntervalDays { get; set; } = 30;
-    public string RenewalIntervalMode { get; set; } = "DaysBeforeExpiry";
+    /// <summary>One of <see cref="RenewalIntervalModes"/>.</summary>
+    public string RenewalIntervalMode { get; set; } = RenewalIntervalModes.DaysBeforeExpiry;
+    /// <summary>PercentageOfLifetime mode: renew once this much of the lifetime has passed (clamped to 1-99).</summary>
+    public int RenewalLifetimePercentage { get; set; } = 75;
     public int MaxRenewalRequests { get; set; } = 0;
     public int RenewalCheckIntervalMinutes { get; set; } = 60;
     public bool EnableHttpChallengeServer { get; set; } = true;
     public string HttpChallengeServerPrefix { get; set; } = "http://+:80/.well-known/acme-challenge/";
     public string DefaultCertificateAuthority { get; set; } = "letsencrypt.org";
     public string? DefaultKeyType { get; set; } = "RS256";
-    public bool EnableStatusReporting { get; set; } = true;
     /// <summary>After the DNS propagation delay, wait up to this long for TXT records to appear on the authoritative name servers (0 = skip the check).</summary>
     public int DnsPropagationCheckSeconds { get; set; } = 300;
+    /// <summary>When set, request failures, deployment task failures and recoveries are POSTed here as JSON (with a Slack-compatible "text" field).</summary>
     public string? NotificationWebhookUrl { get; set; }
     public string CertificateStorePath { get; set; } = "";
 }

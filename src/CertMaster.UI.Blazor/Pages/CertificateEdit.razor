@@ -80,7 +80,9 @@
                 </MudSelect>
                 <MudSwitch T="bool" @bind-Value="_item.UseStagingMode" Color="Color.Warning" Label="Use staging (test) environment" />
                 <MudSwitch T="bool" @bind-Value="_item.IncludeInAutoRenew" Color="Color.Primary" Label="Auto renew" />
+                <MudSwitch T="bool" @bind-Value="_item.RequestConfig.EnableFailureNotifications" Color="Color.Primary" Label="Send failure notifications (instance webhook)" />
                 <MudSelect T="string" @bind-Value="_item.RequestConfig.CSRKeyAlg" Label="Key type" Variant="Variant.Outlined" Class="my-3">
+                    <MudSelectItem T="string" Value="@("")">Instance default</MudSelectItem>
                     <MudSelectItem T="string" Value="@("RS256")">RSA 2048</MudSelectItem>
                     <MudSelectItem T="string" Value="@("RS256-3072")">RSA 3072</MudSelectItem>
                     <MudSelectItem T="string" Value="@("RS256-4096")">RSA 4096</MudSelectItem>
@@ -315,6 +317,7 @@
                 ? new ManagedCertificate { RequestConfig = new CertRequestConfig { Challenges = { new CertRequestChallengeConfig { ChallengeProvider = "HTTP01.BuiltIn" } } } }
                 : await Hub.GetItemAsync(InstanceId, Id);
             _item.RequestConfig.WebhookTrigger ??= "none";
+            _item.RequestConfig.CSRKeyAlg ??= "";
             _sanText = string.Join("\n", _item.RequestConfig.SubjectAlternativeNames.Where(d => d != _item.RequestConfig.PrimaryDomain));
             _ipText = string.Join("\n", _item.RequestConfig.SubjectIPAddresses);
             if (!IsNew) _poll = new Timer(async _ => await PollProgress(), null, 0, 3000);

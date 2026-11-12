@@ -253,7 +253,10 @@ public partial class CertManager
 
         var log = new ItemLog(_paths, item.Id, _logger);
         var result = new CertificateRequestResult { ManagedItem = item };
+        var previousStatus = item.LastRenewalStatus;
+        var cancelled = false;
         var taskWarning = false;
+        var tasksFailed = false;
         try
         {
             await Report(item, RequestState.Running, $"Beginning certificate request for {item.Name}", log);
@@ -286,7 +289,7 @@ public partial class CertManager
         catch (Exception ex)
         {
             var msg = ex is AcmeRequestException are ? $"ACME error: {are.Error?.Detail ?? are.Message}" : ex.Message;
-            if (ex is OperationCanceledException) msg = "Request cancelled.";
+            if (ex is OperationCanceledException) { msg = "Request cancelled."; cancelled = true; }
             if (ex.ToString().Contains("accountDoesNotExist", StringComparison.Ordinal))
                 msg = "The ACME account no longer exists at the CA (it was deactivated, or the CA was reset). Register the account again in Settings > Certificate Authorities.";
             else if (ex is AggregateException agg && agg.InnerException != null && msg.StartsWith("One or more errors"))
@@ -308,6 +311,7 @@ public partial class CertManager
             var post = await RunTasksAsync(item, item.PostRequestTasks, result.IsSuccess, result.Message, log, false, cts.Token);
             if (post == TaskListOutcome.Failed && result.IsSuccess)
             {
+                tasksFailed = true;
                 item.LastRenewalStatus = RequestState.Warning;
                 result.Message += " (one or more deployment tasks failed)";
             }
@@ -321,6 +325,9 @@ public partial class CertManager
         catch (Exception ex) { log.Error("Post-request processing failed: " + ex.Message); }
         finally
         {
+            try { await SendNotificationAsync(item, previousStatus, cancelled, tasksFailed, result.Message, log); }
+            catch (Exception ex) { log.Warn("Notification failed: " + ex.Message); }
+
             RefreshHealth(item);
             await _store.UpsertAsync(ItemsCollection, item.Id, item);
             _running.TryRemove(id, out _);
@@ -337,6 +344,12 @@ public partial class CertManager
         if (_running.TryGetValue(id, out var cts)) { cts.Cancel(); return true; }
         return false;
     }
+
+    /// <summary>The item's key type, or the instance default (Preferences.DefaultKeyType) when the item leaves it blank.</summary>
+    public static string ResolveKeyAlg(string? itemAlg, Preferences prefs) =>
+        !string.IsNullOrWhiteSpace(itemAlg) ? itemAlg.Trim()
+        : !string.IsNullOrWhiteSpace(prefs.DefaultKeyType) ? prefs.DefaultKeyType.Trim()
+        : "RS256";
 
     private static IKey CreateKey(string? alg) => (alg ?? "RS256").ToUpperInvariant() switch
     {
@@ -519,7 +532,7 @@ public partial class CertManager
         var files = GetFiles(item, prefs);
         IKey certKey = item.RequestConfig.ReusePrivateKey && File.Exists(files.KeyPem)
             ? KeyFactory.FromPem(await File.ReadAllTextAsync(files.KeyPem, ct))
-            : CreateKey(item.RequestConfig.CSRKeyAlg);
+            : CreateKey(ResolveKeyAlg(item.RequestConfig.CSRKeyAlg, prefs));
 
         var csr = new CsrInfo();
         var primary = item.RequestConfig.PrimaryDomain;
@@ -821,11 +834,19 @@ public partial class CertManager
         if (item.DateExpiry == null) { reason = "no certificate yet"; return true; }
         if (item.CertificateRevoked) { reason = "certificate revoked"; return true; }
 
-        var days = (double)(item.CustomRenewalDaysBeforeExpiry ?? prefs.RenewalIntervalDays);
-        if (item.DateStart != null)
+        double? lifetime = item.DateStart != null ? (item.DateExpiry.Value - item.DateStart.Value).TotalDays : null;
+        double days;
+        if (item.CustomRenewalDaysBeforeExpiry == null && lifetime != null
+            && string.Equals(prefs.RenewalIntervalMode, RenewalIntervalModes.PercentageOfLifetime, StringComparison.OrdinalIgnoreCase))
         {
-            var lifetime = (item.DateExpiry.Value - item.DateStart.Value).TotalDays;
-            days = Math.Min(days, lifetime / 3.0);
+            // Renew once the configured share of the lifetime has passed, i.e. when (100 - pct)% remains.
+            var pct = Math.Clamp(prefs.RenewalLifetimePercentage, 1, 99);
+            days = lifetime.Value * (100 - pct) / 100.0;
+        }
+        else
+        {
+            days = item.CustomRenewalDaysBeforeExpiry ?? prefs.RenewalIntervalDays;
+            if (lifetime != null) days = Math.Min(days, lifetime.Value / 3.0);
         }
         var remaining = (item.DateExpiry.Value - now).TotalDays;
         if (remaining <= days) { reason = $"{remaining:0.#} days remaining (threshold {days:0.#})"; return true; }

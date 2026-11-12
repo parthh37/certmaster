@@ -10,8 +10,14 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="16,4" MaxWidth="620" HorizontalAlignment="Left" DataContext="{Binding Preferences}">
                         <TextBlock Text="Renewals" Style="{StaticResource SectionTitle}" />
-                        <TextBlock Text="Renew when this many days remain before expiry (short-lived certificates renew at one third of their lifetime)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
+                        <TextBlock Text="Renew certificates at" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding DataContext.Settings.RenewalModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding RenewalIntervalMode}" Width="320" HorizontalAlignment="Left" />
+                        <TextBlock Text="Days before expiry (short-lived certificates renew at one third of their lifetime)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
                         <mah:NumericUpDown Value="{Binding RenewalIntervalDays}" Minimum="1" Maximum="60" Width="140" HorizontalAlignment="Left" />
+                        <TextBlock Text="Percentage of lifetime (e.g. 75 renews a 90-day certificate after about 67 days)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
+                        <mah:NumericUpDown Value="{Binding RenewalLifetimePercentage}" Minimum="1" Maximum="99" Width="140" HorizontalAlignment="Left" />
+                        <TextBlock Text="A per-certificate &quot;renew N days before expiry&quot; value overrides both." Style="{StaticResource Hint}" TextWrapping="Wrap" />
                         <TextBlock Text="Check for renewals every (minutes)" Style="{StaticResource FieldLabel}" />
                         <mah:NumericUpDown Value="{Binding RenewalCheckIntervalMinutes}" Minimum="5" Maximum="1440" Width="140" HorizontalAlignment="Left" />
                         <TextBlock Text="Maximum renewals per run (0 = unlimited)" Style="{StaticResource FieldLabel}" />
@@ -25,8 +31,14 @@
                         <TextBlock Text="Storage" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
                         <TextBlock Text="Certificate store folder" Style="{StaticResource FieldLabel}" />
                         <TextBox Text="{Binding CertificateStorePath}" />
-                        <TextBlock Text="Default key type for new certificates" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding DefaultKeyType}" Width="160" HorizontalAlignment="Left" />
+                        <TextBlock Text="Default key type (used by certificates whose key type is &quot;Instance default&quot;)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
+                        <ComboBox ItemsSource="{Binding DataContext.Settings.KeyTypes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding DefaultKeyType}" Width="200" HorizontalAlignment="Left" />
+                        <TextBlock Text="Notifications" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
+                        <TextBlock Text="Webhook URL for failure alerts (blank = off). Failed requests, failed deployment tasks and recoveries are POSTed as JSON with a Slack-compatible &quot;text&quot; field. Each certificate can opt out." Style="{StaticResource Hint}" TextWrapping="Wrap" />
+                        <TextBox Text="{Binding NotificationWebhookUrl}" mah:TextBoxHelper.Watermark="https://hooks.example.com/..." />
+                        <Button Content="Send Test Notification" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                Command="{Binding DataContext.Settings.SendTestNotificationCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                         <Button Content="Save Settings" Margin="0,16,0,0" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left"
                                 Command="{Binding DataContext.Settings.SavePreferencesCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                     </StackPanel>

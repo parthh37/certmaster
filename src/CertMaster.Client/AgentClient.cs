@@ -83,6 +83,8 @@ public class AgentClient : IAsyncDisposable
     public Task<SystemVersion> GetVersionAsync() => Get<SystemVersion>("api/system/version");
     public Task<Preferences> GetPreferencesAsync() => Get<Preferences>("api/preferences");
     public Task<ActionResult> SetPreferencesAsync(Preferences p) => Post<ActionResult>("api/preferences", p);
+    public Task<ActionResult> SendTestNotificationAsync(string? url) =>
+        Post<ActionResult>("api/preferences/notifications/test", new TestNotificationRequest { Url = url });
     public Task<List<string>> GetServiceLogAsync(int lines = 500) => Get<List<string>>($"api/system/log?lines={lines}");
 
     // ---------- managed certificates ----------

@@ -119,7 +119,10 @@ public partial class CertManager
         Add("Domains", domains.Count == 0 ? "None" : string.Join(", ", domains) + (string.IsNullOrEmpty(rc.PrimaryDomain) ? "" : $" (primary: {rc.PrimaryDomain})"),
             err: domains.Count == 0 && rc.SubjectIPAddresses.Count == 0);
         if (rc.SubjectIPAddresses.Count > 0) Add("IP addresses", string.Join(", ", rc.SubjectIPAddresses));
-        Add("Key type", KeyTypeLabel(rc.CSRKeyAlg) + (rc.ReusePrivateKey ? ", reusing the existing private key" : ", new private key"));
+        var keyLabel = string.IsNullOrWhiteSpace(rc.CSRKeyAlg)
+            ? KeyTypeLabel(ResolveKeyAlg(null, await GetPreferencesAsync())) + " (instance default)"
+            : KeyTypeLabel(rc.CSRKeyAlg);
+        Add("Key type", keyLabel + (rc.ReusePrivateKey ? ", reusing the existing private key" : ", new private key"));
         if (!string.IsNullOrWhiteSpace(rc.PreferredChain)) Add("Preferred chain", rc.PreferredChain);
         if (!string.IsNullOrWhiteSpace(rc.AcmeProfile)) Add("ACME profile", rc.AcmeProfile);
         if (!string.IsNullOrWhiteSpace(item.ARICertificateId) && !item.CertificateRevoked) Add("Renewal", "Replacement (ARI) order for the current certificate");
