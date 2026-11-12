@@ -19,8 +19,10 @@ There are no license keys, evaluation limits or paid tiers. MIT licensed.
 - Multi-domain, wildcard and IP-address certificates. RSA 2048/3072/4096 and ECDSA P-256/P-384 keys, with
   optional private-key reuse.
 - Preferred chain, ACME profiles (e.g. `shortlived`), and ARI (RFC 9773) replacement orders.
-- Automatic renewal: at a configurable number of days before expiry, or one third of the lifetime for short-lived
-  certificates. Failures retry with exponential back-off.
+- Automatic renewal: at a configurable number of days before expiry (one third of the lifetime for short-lived
+  certificates), or at a percentage of the certificate lifetime. Failures retry with exponential back-off.
+- Failure alerts: failed requests, failed deployment tasks and recoveries are POSTed as JSON to a webhook
+  (Slack-compatible `text` field). Each certificate can opt out.
 - Test (dry-run checks), Preview (a full plan of what a request will do), revoke, PFX/PEM export, and per-certificate
   request logs.
 

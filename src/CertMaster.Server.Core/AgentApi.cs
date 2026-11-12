@@ -28,6 +28,7 @@ public static class AgentApi
         });
         api.MapGet("/preferences", (CertManager m) => m.GetPreferencesAsync());
         api.MapPost("/preferences", async (CertManager m, Preferences p) => { await m.SetPreferencesAsync(p); return ActionResult.Ok("Preferences saved"); });
+        api.MapPost("/preferences/notifications/test", (CertManager m, TestNotificationRequest r) => m.SendTestNotificationAsync(r.Url));
 
         // ---- managed certificates ----
         var mc = api.MapGroup("/managedcertificates");

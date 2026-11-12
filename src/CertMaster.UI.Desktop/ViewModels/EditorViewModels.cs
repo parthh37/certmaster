@@ -57,6 +57,15 @@ public static class Choices
         new("RS256", "RSA 2048"), new("RS256-3072", "RSA 3072"), new("RS256-4096", "RSA 4096"),
         new("ES256", "ECDSA P-256"), new("ES384", "ECDSA P-384"),
     };
+
+    /// <summary>Key types for a certificate: blank follows the instance default from Settings.</summary>
+    public static readonly List<Choice<string>> ItemKeyTypes = new[] { new Choice<string>("", "Instance default (Settings)") }.Concat(KeyTypes).ToList();
+
+    public static readonly List<Choice<string>> RenewalModes = new()
+    {
+        new(RenewalIntervalModes.DaysBeforeExpiry, "A number of days before expiry"),
+        new(RenewalIntervalModes.PercentageOfLifetime, "A percentage of the certificate lifetime"),
+    };
 }
 
 public partial class DomainOptionViewModel : ObservableObject
@@ -238,7 +247,7 @@ public partial class CertificateEditorViewModel : ObservableObject
     public List<DeploymentProviderDefinition> DeploymentProviders => _catalog.DeploymentProviders;
     public List<Choice<DeploymentOption>> DeploymentModes => Choices.DeploymentModes;
     public List<Choice<DeploymentBindingOption>> BindingOptions => Choices.BindingOptions;
-    public List<Choice<string>> KeyTypes => Choices.KeyTypes;
+    public List<Choice<string>> KeyTypes => Choices.ItemKeyTypes;
 
     public ObservableCollection<DomainOptionViewModel> Domains { get; }
     public ObservableCollection<ChallengeConfigViewModel> Challenges { get; }

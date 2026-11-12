@@ -10,7 +10,6 @@ public static class ChallengeTypes
 {
     public const string Http01 = "http-01";
     public const string Dns01 = "dns-01";
-    public const string TlsAlpn01 = "tls-alpn-01";
 }
 
 /// <summary>A certificate that CertMaster requests, renews and deploys.</summary>
@@ -85,12 +84,11 @@ public class CertRequestConfig
 
     public List<CertRequestChallengeConfig> Challenges { get; set; } = new() { new CertRequestChallengeConfig() };
 
-    /// <summary>RS256 (RSA 2048), RS256-3072, RS256-4096, ES256, ES384.</summary>
-    public string CSRKeyAlg { get; set; } = "RS256";
+    /// <summary>RS256 (RSA 2048), RS256-3072, RS256-4096, ES256, ES384. Blank = the instance default (Preferences.DefaultKeyType).</summary>
+    public string CSRKeyAlg { get; set; } = "";
     public bool ReusePrivateKey { get; set; }
     public string? PreferredChain { get; set; }
     public string? AcmeProfile { get; set; }
-    public int? PreferredExpiryDays { get; set; }
 
     // ---- Deployment (web server bindings, e.g. IIS) ----
     public DeploymentOption DeploymentSiteOption { get; set; } = DeploymentOption.Auto;
@@ -113,6 +111,7 @@ public class CertRequestConfig
     public string? WebhookContentType { get; set; } = "application/json";
     public string? WebhookContentBody { get; set; }
 
+    /// <summary>Send this item's failures to the instance notification webhook (Preferences.NotificationWebhookUrl).</summary>
     public bool EnableFailureNotifications { get; set; } = true;
 }
 
