@@ -330,6 +330,17 @@ public partial class CertManager
     };
 
 
+
+    /// <summary>http-01 web root: the challenge config's webroot, else the item's website root, else the selected IIS site's physical path.</summary>
+    private async Task<string?> ResolveWebRootAsync(ManagedCertificate item, CertRequestChallengeConfig cfg)
+    {
+        var explicitRoot = cfg.Parameters.FirstOrDefault(p => p.Key == "webroot")?.Value;
+        if (!string.IsNullOrWhiteSpace(explicitRoot)) return explicitRoot;
+        if (!string.IsNullOrWhiteSpace(item.RequestConfig.WebsiteRootPath)) return item.RequestConfig.WebsiteRootPath;
+        if (string.IsNullOrWhiteSpace(item.ServerSiteId)) return null;
+        try { return await GetSiteWebRootAsync(item.ServerSiteId); }
+        catch { return null; }
+    }
     internal async Task<string?> GetPfxPasswordAsync(ManagedCertificate item) =>
         item.CertificatePasswordCredentialId == null ? null
             : (await _credentials.GetUnlockedCredentialsDictionaryAsync(item.CertificatePasswordCredentialId)).GetValueOrDefault("password");
@@ -404,7 +415,7 @@ public partial class CertManager
                 {
                     var challenge = await authz.Http() ?? throw new InvalidOperationException($"CA did not offer http-01 for {domain}.");
                     var keyAuthz = challenge.KeyAuthz;
-                    var webroot = cfg.Parameters.FirstOrDefault(p => p.Key == "webroot")?.Value ?? item.RequestConfig.WebsiteRootPath;
+                    var webroot = await ResolveWebRootAsync(item, cfg);
                     var served = false;
                     if (prefs.EnableHttpChallengeServer)
                     {
@@ -689,7 +700,7 @@ public partial class CertManager
                 else if (string.IsNullOrWhiteSpace(item.RequestConfig.WebsiteRootPath))
                     return new ActionStep($"http-01: {domain}", "Built-in HTTP challenge server could not start: " + err, true);
             }
-            var webroot = cfg.Parameters.FirstOrDefault(p => p.Key == "webroot")?.Value ?? item.RequestConfig.WebsiteRootPath;
+            var webroot = await ResolveWebRootAsync(item, cfg);
             if (!string.IsNullOrWhiteSpace(webroot)) file = HttpChallengeServer.WriteChallengeFile(webroot, token, value);
 
             var url = $"http://{domain}/.well-known/acme-challenge/{token}";
