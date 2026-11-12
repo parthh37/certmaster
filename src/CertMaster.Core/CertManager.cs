@@ -558,6 +558,7 @@ public partial class CertManager
                 RequestSucceeded = requestOk, RequestMessage = message,
                 Parameters = MergeParameters(provider.Definition, task.Parameters),
                 Credentials = await _credentials.GetUnlockedCredentialsDictionaryAsync(task.ChallengeCredentialKey),
+                UnlockCredentialAsync = _credentials.GetUnlockedCredentialsDictionaryAsync,
             };
 
             var validation = await provider.ValidateAsync(ctx);
@@ -665,6 +666,7 @@ public partial class CertManager
                 Item = item, Task = task, Files = GetFiles(item, prefs), Log = new ItemLog(_paths, item.Id, _logger), Http = _http, IsPreviewOnly = true,
                 Parameters = MergeParameters(p.Definition, task.Parameters),
                 Credentials = await _credentials.GetUnlockedCredentialsDictionaryAsync(task.ChallengeCredentialKey),
+                UnlockCredentialAsync = _credentials.GetUnlockedCredentialsDictionaryAsync,
             };
             var v = await p.ValidateAsync(ctx);
             steps.Add(v.Count == 0 ? new ActionStep($"Task: {task.TaskName}", "Configuration OK") : new ActionStep($"Task: {task.TaskName}", string.Join("; ", v.Select(x => x.Title)), true));
