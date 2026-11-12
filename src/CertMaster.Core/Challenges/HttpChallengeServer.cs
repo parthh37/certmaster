@@ -33,11 +33,12 @@ public class HttpChallengeServer : IDisposable
             try
             {
                 _listener?.Close();
-                _listener = new HttpListener();
-                _listener.Prefixes.Add(prefix.EndsWith('/') ? prefix : prefix + "/");
-                _listener.Start();
+                var listener = new HttpListener();
+                _listener = listener;
+                listener.Prefixes.Add(prefix.EndsWith('/') ? prefix : prefix + "/");
+                listener.Start();
                 _prefix = prefix;
-                _ = Task.Run(() => Loop(_listener));
+                _ = Task.Run(() => Loop(listener)); // capture this listener, not the field (a later Start/Stop replaces it)
                 _logger.LogInformation("HTTP challenge server listening on {Prefix}", prefix);
                 return true;
             }
@@ -74,7 +75,15 @@ public class HttpChallengeServer : IDisposable
         {
             HttpListenerContext ctx;
             try { ctx = await listener.GetContextAsync(); }
-            catch { break; }
+            catch (ObjectDisposedException) { break; }
+            catch (Exception ex) when (ex is HttpListenerException or InvalidOperationException)
+            {
+                if (!listener.IsListening) break; // stopped
+                // Transient (e.g. client aborted, ERROR_NETNAME_DELETED): keep serving the remaining challenges.
+                _logger.LogDebug(ex, "HTTP challenge listener accept error");
+                await Task.Delay(100);
+                continue;
+            }
             try
             {
                 var token = ctx.Request.Url?.Segments.LastOrDefault()?.Trim('/') ?? "";
@@ -106,6 +115,9 @@ public class HttpChallengeServer : IDisposable
     {
         var dir = Path.Combine(webRoot, ".well-known", "acme-challenge");
         Directory.CreateDirectory(dir);
+        // ACME tokens are base64url, but never let a token from the CA escape the challenge folder.
+        if (token.Length == 0 || token.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_')))
+            throw new InvalidOperationException("The CA sent an http-01 token with unexpected characters.");
         var path = Path.Combine(dir, token);
         File.WriteAllText(path, keyAuthorization, new UTF8Encoding(false));
         var webConfig = Path.Combine(dir, "web.config");

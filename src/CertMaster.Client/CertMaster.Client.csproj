@@ -14,4 +14,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\ForeverRetryPolicy.cs" Link="Shared\ForeverRetryPolicy.cs" />
+  </ItemGroup>
+
 </Project>

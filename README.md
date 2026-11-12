@@ -73,6 +73,53 @@ Both are self-contained (no .NET install needed) and support Windows 10 / Server
 
 Production hub deployments should sit behind HTTPS (a reverse proxy, or Kestrel certificate configuration).
 
+## Running on Windows Server
+
+CertMaster supports Windows Server 2019, 2022 and 2025, with Desktop Experience or Server Core. On Server Core the
+agent installer installs only the service (the desktop app needs WPF), and you manage the server from a Management Hub.
+Silent installs work: `certmaster-windows-x64-<version>.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=setup.log`.
+
+**Services.** Both services run as LocalSystem with delayed automatic start. If a service crashes or stops with an
+error, Windows restarts it after 1 minute, again after 1 minute, then every 5 minutes; the failure count resets daily.
+On shutdown a running certificate request gets up to 60 seconds to finish. Upgrades wait for it before replacing files.
+
+**Monitoring.** Each service logs to `C:\ProgramData\CertMaster\logs\service.log` (hub: `...\CertMasterHub\logs\hub.log`).
+Logs roll daily or at 50 MB, and 31 files are kept. Warnings and errors also go to the Windows **Application** event
+log, under the sources `CertMaster Agent` and `CertMaster Management Hub` (event ID 1000 = error, 2000 = warning).
+Point your monitoring (SCOM, Zabbix, Datadog, Windows Event Forwarding) at those sources. A service that can't start,
+for example because its port is in use, logs the reason there and exits with an error code.
+
+**Failure handling.**
+- Each request has a 2-hour hang guard. Failed requests retry with back-off (at least 3 hours when the CA reports a
+  rate limit).
+- Transient ACME, DNS API and network errors are retried on the spot. When the CA finalizes slowly, the order is
+  waited on for up to about 5 minutes instead of being abandoned.
+- Certificate, key and backup files are replaced atomically, so a crash or full disk never leaves a half-written key.
+- The databases are backed up daily (14 kept, in `backups\`). If a database is damaged at start-up, the service moves
+  it aside, restores the newest good backup and logs a critical event. With no usable backup it refuses to start
+  rather than run with an empty configuration.
+- Stored secrets are encrypted with DPAPI (LocalMachine). They can't be decrypted on a different server: after
+  moving the data folder to new hardware, enter the credentials again.
+
+**Outbound proxy.** LocalSystem services don't use the `netsh winhttp` proxy. If the server reaches the internet
+through a proxy, create `appsettings.Production.json` next to `CertMaster.Server.Core.exe`
+(`C:\Program Files\CertMaster\Service`). Upgrades keep this file. Then restart the service:
+
+```json
+{ "Agent": { "Proxy": "http://proxy.corp.example:8080", "ProxyBypass": "*.corp.example;10.*" } }
+```
+
+Machine-wide `HTTPS_PROXY` and `NO_PROXY` environment variables also work.
+
+**Hub HTTPS and settings.** The installer writes the port into `appsettings.Installer.json`. Your own settings go in
+`appsettings.Production.json` in the hub's `Service` folder, which overrides it and is kept on upgrade. For example,
+to use Kestrel with a certificate from the machine store:
+
+```json
+{ "Kestrel": { "Endpoints": { "Https": { "Url": "https://*:9697",
+  "Certificate": { "Subject": "hub.example.com", "Store": "My", "Location": "LocalMachine" } } } } }
+```
+
 ## Build from source
 
 Requirements: .NET 10 SDK on Windows, and Inno Setup 6 for the installers.

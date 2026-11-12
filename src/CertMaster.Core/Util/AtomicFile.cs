@@ -30,6 +30,36 @@ public static class AtomicFile
         else File.Move(tmp, path);
     }
 
+    /// <summary>
+    /// Replaces <paramref name="path"/> with <paramref name="content"/> without ever exposing a partial file: the data is
+    /// written and flushed to a temporary file in the same folder, then renamed over the target. No backup copy is kept
+    /// (use for files such as private keys that should not be duplicated). Retries briefly while another process (a
+    /// backup agent, antivirus, a service reading the certificate) holds the target open.
+    /// </summary>
+    public static void WriteAllBytesNoBackup(string path, byte[] content)
+    {
+        var tmp = path + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+        try
+        {
+            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(content);
+                fs.Flush(flushToDisk: true);
+            }
+            for (var attempt = 1; ; attempt++)
+            {
+                try { File.Move(tmp, path, overwrite: true); return; }
+                catch (Exception ex) when (attempt < 10 && ex is IOException or UnauthorizedAccessException) { Thread.Sleep(200 * attempt); }
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (IOException) { /* best effort */ } catch (UnauthorizedAccessException) { /* best effort */ }
+        }
+    }
+
+    public static void WriteAllTextNoBackup(string path, string content) => WriteAllBytesNoBackup(path, new UTF8Encoding(false).GetBytes(content));
+
     /// <summary>True when the file or its backup exists, i.e. there is something a failed read must not overwrite.</summary>
     public static bool Exists(string path) => File.Exists(path) || File.Exists(BackupPath(path));
 

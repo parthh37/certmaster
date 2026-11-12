@@ -15,6 +15,7 @@ using CertMaster.Core.Providers;
 using CertMaster.Core.Providers.Deployment;
 using CertMaster.Core.Providers.Dns;
 using CertMaster.Core.Storage;
+using CertMaster.Core.Util;
 using CertMaster.Models;
 using Microsoft.Extensions.Logging;
 
@@ -47,7 +48,8 @@ public partial class CertManager
     {
         _store = store; _credentials = credentials; _acme = acme; _providers = providers;
         _httpChallenge = httpChallenge; _paths = paths; _logger = logger;
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        // Timeout covers the whole call including transient retries.
+        _http = http ?? TransientRetryHandler.CreateClient(TimeSpan.FromSeconds(100));
     }
 
     public CredentialsManager Credentials => _credentials;
@@ -249,7 +251,10 @@ public partial class CertManager
         if (item == null) return new CertificateRequestResult { Message = "Managed certificate not found" };
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        if (!_running.TryAdd(id, cts)) return new CertificateRequestResult { Message = "A request is already in progress for this item.", ManagedItem = item };
+        if (!_running.TryAdd(id, cts)) { cts.Dispose(); return new CertificateRequestResult { Message = "A request is already in progress for this item.", ManagedItem = item }; }
+        // Hang guard: a stuck CA, DNS API or deployment script must not block this item (and the renewal queue) forever.
+        _userCancelled.TryRemove(id, out _);
+        cts.CancelAfter(MaxRequestDuration);
 
         var log = new ItemLog(_paths, item.Id, _logger);
         var result = new CertificateRequestResult { ManagedItem = item };
@@ -289,7 +294,13 @@ public partial class CertManager
         catch (Exception ex)
         {
             var msg = ex is AcmeRequestException are ? $"ACME error: {are.Error?.Detail ?? are.Message}" : ex.Message;
-            if (ex is OperationCanceledException) { msg = "Request cancelled."; cancelled = true; }
+            if (ex is OperationCanceledException)
+            {
+                // Distinguish the hang guard (a failure that must retry) from a user or service-stop cancellation.
+                if (!ct.IsCancellationRequested && !_userCancelled.ContainsKey(id))
+                    msg = $"The request did not finish within {MaxRequestDuration.TotalMinutes:0} minutes and was stopped.";
+                else { msg = "Request cancelled."; cancelled = true; }
+            }
             if (ex.ToString().Contains("accountDoesNotExist", StringComparison.Ordinal))
                 msg = "The ACME account no longer exists at the CA (it was deactivated, or the CA was reset). Register the account again in Settings > Certificate Authorities.";
             else if (ex is AggregateException agg && agg.InnerException != null && msg.StartsWith("One or more errors"))
@@ -298,6 +309,8 @@ public partial class CertManager
             item.RenewalFailureCount++;
             item.RenewalFailureMessage = msg;
             var backoffHours = Math.Min(Math.Pow(2, item.RenewalFailureCount - 1), 24);
+            // Hammering a CA that is rate limiting us only extends the limit; wait at least 3 hours.
+            if (IsRateLimited(ex)) backoffHours = Math.Max(backoffHours, 3);
             item.DateNextScheduledRenewalAttempt = DateTimeOffset.UtcNow.AddHours(backoffHours);
             result.IsSuccess = false;
             result.Message = msg;
@@ -308,7 +321,9 @@ public partial class CertManager
         try
         {
             // Post-request tasks run according to their triggers
-            var post = await RunTasksAsync(item, item.PostRequestTasks, result.IsSuccess, result.Message, log, false, cts.Token);
+            // After the hang guard fired, on-error tasks (alerts, clean-up) still run, bounded by their own timeouts.
+            var postToken = cts.IsCancellationRequested && !cancelled ? ct : cts.Token;
+            var post = await RunTasksAsync(item, item.PostRequestTasks, result.IsSuccess, result.Message, log, false, postToken);
             if (post == TaskListOutcome.Failed && result.IsSuccess)
             {
                 tasksFailed = true;
@@ -328,20 +343,63 @@ public partial class CertManager
             try { await SendNotificationAsync(item, previousStatus, cancelled, tasksFailed, result.Message, log); }
             catch (Exception ex) { log.Warn("Notification failed: " + ex.Message); }
 
-            RefreshHealth(item);
-            await _store.UpsertAsync(ItemsCollection, item.Id, item);
-            _running.TryRemove(id, out _);
-            cts.Dispose();
+            try
+            {
+                RefreshHealth(item);
+                await SaveItemWithRetryAsync(item, log);
+            }
+            finally
+            {
+                // Always release the item, even when saving failed: otherwise it stays "in progress" (no renewals, no edits)
+                // until the service restarts.
+                _running.TryRemove(id, out _);
+                _userCancelled.TryRemove(id, out _);
+                cts.Dispose();
+            }
             await Report(item, item.LastRenewalStatus == RequestState.Error ? RequestState.Error : RequestState.Success, result.Message ?? "", log, final: true);
-            await ProgressReporter.ManagedCertificateUpdatedAsync(item);
+            try { await ProgressReporter.ManagedCertificateUpdatedAsync(item); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Progress report failed"); }
         }
         result.ManagedItem = item;
         return result;
     }
 
+    /// <summary>Upper bound for one certificate request including validation and deployment tasks (hang guard).</summary>
+    internal static TimeSpan MaxRequestDuration { get; set; } = TimeSpan.FromHours(2);
+
+    private readonly ConcurrentDictionary<string, bool> _userCancelled = new();
+
+    /// <summary>
+    /// The request result must be persisted: losing it would hide a new certificate (wrong expiry shown, renewed again) or
+    /// a failure. Retries transient errors such as a locked database or a briefly full disk.
+    /// </summary>
+    private async Task SaveItemWithRetryAsync(ManagedCertificate item, ItemLog log)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { await _store.UpsertAsync(ItemsCollection, item.Id, item); return; }
+            catch (Exception ex) when (attempt < 5)
+            {
+                log.Warn($"Saving the request result failed ({ex.Message}); retrying.");
+                await Task.Delay(TimeSpan.FromSeconds(2 * attempt));
+            }
+            catch (Exception ex)
+            {
+                log.Error("Saving the request result failed: " + ex.Message);
+                _logger.LogError(ex, "Could not save the result of the certificate request for {Name}", item.Name);
+                return;
+            }
+        }
+    }
+
     public bool CancelRequest(string id)
     {
-        if (_running.TryGetValue(id, out var cts)) { cts.Cancel(); return true; }
+        if (_running.TryGetValue(id, out var cts))
+        {
+            _userCancelled[id] = true;
+            try { cts.Cancel(); } catch (ObjectDisposedException) { /* finished meanwhile */ }
+            return true;
+        }
         return false;
     }
 
@@ -395,16 +453,16 @@ public partial class CertManager
         try
         {
             if (!string.IsNullOrEmpty(item.RequestConfig.AcmeProfile))
-                order = await acme.NewOrderWithProfile(identifiers, item.RequestConfig.AcmeProfile, null, null, item.ARICertificateId, false);
+                order = await AcmeCallAsync(() => acme.NewOrderWithProfile(identifiers, item.RequestConfig.AcmeProfile, null, null, item.ARICertificateId, false), "new order", log, ct);
             else if (!string.IsNullOrEmpty(item.ARICertificateId) && !item.CertificateRevoked)
-                order = await acme.NewReplacementOrder(identifiers, item.ARICertificateId, null, null);
+                order = await AcmeCallAsync(() => acme.NewReplacementOrder(identifiers, item.ARICertificateId, null, null), "new order", log, ct);
             else
-                order = await acme.NewOrder(identifiers, null, null);
+                order = await AcmeCallAsync(() => acme.NewOrder(identifiers, null, null), "new order", log, ct);
         }
-        catch (AcmeRequestException ex) when (!string.IsNullOrEmpty(item.ARICertificateId))
+        catch (AcmeRequestException ex) when (!string.IsNullOrEmpty(item.ARICertificateId) && !IsTransientAcmeError(ex, ct))
         {
             log.Warn($"Replacement (ARI) order not accepted ({ex.Error?.Detail}), creating a standard order.");
-            order = await acme.NewOrder(identifiers, null, null);
+            order = await AcmeCallAsync(() => acme.NewOrder(identifiers, null, null), "new order", log, ct);
         }
         item.CurrentOrderUri = order.Location?.ToString();
         await Report(item, RequestState.Running, "Order created, completing authorizations", log);
@@ -415,10 +473,10 @@ public partial class CertManager
         {
             var maxPropagation = 0;
             var dnsRecords = new List<(string record, string value)>();
-            foreach (var authz in await order.Authorizations())
+            foreach (var authz in await AcmeCallAsync(order.Authorizations, "authorizations", log, ct))
             {
                 ct.ThrowIfCancellationRequested();
-                var res = await authz.Resource();
+                var res = await AcmeCallAsync(authz.Resource, "authorization", log, ct);
                 var domain = (res.Wildcard == true ? "*." : "") + res.Identifier.Value;
                 if (res.Status == AuthorizationStatus.Valid) { log.Info($"{domain}: authorization already valid (cached)"); continue; }
 
@@ -437,7 +495,14 @@ public partial class CertManager
                     pending.Add((challenge, async () =>
                     {
                         var del = await provider.DeleteRecordAsync(dctx, record, txt);
-                        log.Info($"Cleanup {record}: {del.Message}");
+                        if (!del.IsSuccess)
+                        {
+                            // One retry: a transient API error must not leave stale TXT values piling up on every renewal.
+                            await Task.Delay(TimeSpan.FromSeconds(5));
+                            del = await provider.DeleteRecordAsync(dctx, record, txt);
+                        }
+                        if (del.IsSuccess) log.Info($"Cleanup {record}: {del.Message}");
+                        else log.Warn($"Cleanup of {record} failed: {del.Message}. Remove the TXT value manually if it remains.");
                     }, domain));
                     var delay = cfg.PropagationDelaySeconds
                                 ?? (int.TryParse(dctx.Param("propagationdelay"), out var pd) ? pd : provider.Definition.PropagationDelaySeconds);
@@ -487,9 +552,12 @@ public partial class CertManager
             if (dnsRecords.Count > 0 && prefs.DnsPropagationCheckSeconds > 0)
             {
                 await Report(item, RequestState.Running, $"Checking {dnsRecords.Count} TXT record(s) on authoritative name servers", log);
-                foreach (var (record, value) in dnsRecords.Distinct())
+                // All records are checked at the same time under one deadline (sequential checks of a 20-name certificate
+                // could take over an hour when the name servers can't be reached).
+                var checks = dnsRecords.Distinct().Select(async r =>
+                    (r.record, check: await DnsPropagationChecker.WaitForTxtAsync(r.record, r.value, TimeSpan.FromSeconds(prefs.DnsPropagationCheckSeconds), log, ct)));
+                foreach (var (record, check) in await Task.WhenAll(checks))
                 {
-                    var check = await DnsPropagationChecker.WaitForTxtAsync(record, value, TimeSpan.FromSeconds(prefs.DnsPropagationCheckSeconds), log, ct);
                     if (check.IsVisible) log.Info($"{record}: visible on authoritative name servers after {check.Elapsed.TotalSeconds:0}s");
                     else log.Warn($"{record}: not confirmed on all authoritative name servers ({check.Message}). Continuing; the CA may still see it.");
                 }
@@ -498,17 +566,17 @@ public partial class CertManager
             foreach (var (challenge, _, identifier) in pending)
             {
                 await Report(item, RequestState.Running, $"Requesting validation for {identifier}", log);
-                await challenge.Validate();
+                await AcmeCallAsync(challenge.Validate, "challenge validation", log, ct);
             }
 
             // Poll authorizations until valid/invalid
             var deadline = DateTime.UtcNow.AddMinutes(3);
-            foreach (var authz in await order.Authorizations())
+            foreach (var authz in await AcmeCallAsync(order.Authorizations, "authorizations", log, ct))
             {
                 while (true)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var res = await authz.Resource();
+                    var res = await AcmeCallAsync(authz.Resource, "authorization", log, ct);
                     var name = (res.Wildcard == true ? "*." : "") + res.Identifier.Value;
                     if (res.Status == AuthorizationStatus.Valid) { log.Info($"{name}: validated"); break; }
                     if (res.Status is AuthorizationStatus.Invalid or AuthorizationStatus.Revoked or AuthorizationStatus.Expired or AuthorizationStatus.Deactivated)
@@ -530,20 +598,83 @@ public partial class CertManager
 
         await Report(item, RequestState.Running, "Authorizations complete, finalizing order", log);
         var files = GetFiles(item, prefs);
-        IKey certKey = item.RequestConfig.ReusePrivateKey && File.Exists(files.KeyPem)
-            ? KeyFactory.FromPem(await File.ReadAllTextAsync(files.KeyPem, ct))
-            : CreateKey(ResolveKeyAlg(item.RequestConfig.CSRKeyAlg, prefs));
+        IKey? certKey = null;
+        if (item.RequestConfig.ReusePrivateKey && File.Exists(files.KeyPem))
+        {
+            // A damaged or unreadable key file must not block renewal forever: fall back to a new key.
+            try { certKey = KeyFactory.FromPem(await File.ReadAllTextAsync(files.KeyPem, ct)); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                log.Warn($"The existing private key could not be reused ({ex.Message}); a new key will be generated.");
+            }
+        }
+        certKey ??= CreateKey(ResolveKeyAlg(item.RequestConfig.CSRKeyAlg, prefs));
 
         var csr = new CsrInfo();
         var primary = item.RequestConfig.PrimaryDomain;
         if (!string.IsNullOrEmpty(primary) && primary.Length <= 64) csr.CommonName = primary;
-        var chain = await order.Generate(csr, certKey, item.RequestConfig.PreferredChain ?? account.PreferredChain, 10);
+        var preferredChain = item.RequestConfig.PreferredChain ?? account.PreferredChain;
+        CertificateChain chain;
+        try
+        {
+            // Finalization can be asynchronous at the CA; poll for up to ~60 attempts (Retry-After, at least 1 s each).
+            chain = await order.Generate(csr, certKey, preferredChain, 60);
+        }
+        catch (AcmeException ex) when (!ct.IsCancellationRequested)
+        {
+            // The CA may still be issuing after Generate stopped polling. Don't abandon an order that is about to be valid:
+            // a new order would count against the CA's duplicate-certificate rate limit.
+            var res = await AcmeCallAsync(order.Resource, "order", log, ct);
+            if (res.Status is not (Certes.Acme.Resource.OrderStatus.Processing or Certes.Acme.Resource.OrderStatus.Valid)) throw;
+            log.Warn($"Order still {res.Status} after finalization ({ex.Message}); waiting up to 5 minutes for the CA to issue it.");
+            var until = DateTime.UtcNow.AddMinutes(5);
+            while (res.Status == Certes.Acme.Resource.OrderStatus.Processing && DateTime.UtcNow < until)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                res = await AcmeCallAsync(order.Resource, "order", log, ct);
+            }
+            if (res.Status != Certes.Acme.Resource.OrderStatus.Valid) throw;
+            chain = await AcmeCallAsync(() => order.Download(preferredChain), "certificate download", log, ct);
+        }
         var certPem = chain.Certificate.ToPem();
         var issuers = chain.Issuers.Select(i => i.ToPem()).ToList();
         string? ariId = null;
         try { ariId = chain.GetRenewalInfoCertificateId(); } catch { /* CA cert without AKI */ }
         return (certPem, certKey, issuers, ariId);
     }
+
+    /// <summary>
+    /// Runs one ACME call, retrying transient failures (network errors, timeouts, CA 5xx / serverInternal) up to three
+    /// times with jittered back-off. Protocol errors (unauthorized, rejectedIdentifier, rateLimited ...) are not retried.
+    /// </summary>
+    private static async Task<T> AcmeCallAsync<T>(Func<Task<T>> call, string what, ItemLog log, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try { return await call(); }
+            catch (Exception ex) when (attempt < 4 && IsTransientAcmeError(ex, ct))
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(3, attempt) * (0.8 + Random.Shared.NextDouble() * 0.4)); // ~3, 9, 27 s
+                log.Warn($"ACME {what} failed ({ex.GetBaseException().Message}); retrying in {delay.TotalSeconds:0}s");
+                await Task.Delay(delay, ct);
+            }
+        }
+    }
+
+    internal static bool IsTransientAcmeError(Exception ex, CancellationToken ct) => ex switch
+    {
+        HttpRequestException => true,
+        TaskCanceledException => !ct.IsCancellationRequested, // HttpClient timeout, not our cancellation
+        IOException => true,
+        AcmeRequestException a => (int?)a.Error?.Status >= 500
+                                  || (a.Error?.Type?.EndsWith(":serverInternal", StringComparison.Ordinal) ?? false),
+        _ => false,
+    };
+
+    private static bool IsRateLimited(Exception ex) =>
+        ex.ToString().Contains("urn:ietf:params:acme:error:rateLimited", StringComparison.Ordinal)
+        || (ex is AcmeRequestException a && (a.Error?.Type?.EndsWith(":rateLimited", StringComparison.Ordinal) ?? false));
 
     private async Task SaveCertificateAsync(ManagedCertificate item, string certPem, IKey key, List<string> issuers, string? ariId, ItemLog log)
     {
@@ -556,15 +687,28 @@ public partial class CertManager
 
         var keyPem = key.ToPem();
         var chainPem = string.Concat(issuers);
-        await File.WriteAllTextAsync(files.CertPem, certPem);
-        await File.WriteAllTextAsync(files.ChainPem, chainPem);
-        await File.WriteAllTextAsync(files.FullChainPem, certPem + chainPem);
-        await File.WriteAllTextAsync(files.KeyPem, keyPem);
 
+        // Build everything in memory first (a bad chain or key fails here, before any file changes), then replace each
+        // file atomically: a crash, full disk or locked file never leaves a truncated key or certificate behind.
         using var leaf = X509Certificate2.CreateFromPem(certPem, keyPem);
         var collection = new X509Certificate2Collection(leaf);
-        foreach (var pem in issuers) collection.Add(X509Certificate2.CreateFromPem(pem));
-        await File.WriteAllBytesAsync(files.Pfx, collection.Export(X509ContentType.Pkcs12, pfxPassword)!);
+        var issuerCerts = issuers.Select(pem => X509Certificate2.CreateFromPem(pem)).ToList();
+        byte[] pfx;
+        try
+        {
+            collection.AddRange(issuerCerts.ToArray());
+            pfx = collection.Export(X509ContentType.Pkcs12, pfxPassword)!;
+        }
+        finally { foreach (var c in issuerCerts) c.Dispose(); }
+
+        await Task.Run(() =>
+        {
+            AtomicFile.WriteAllTextNoBackup(files.KeyPem, keyPem);
+            AtomicFile.WriteAllTextNoBackup(files.CertPem, certPem);
+            AtomicFile.WriteAllTextNoBackup(files.ChainPem, chainPem);
+            AtomicFile.WriteAllTextNoBackup(files.FullChainPem, certPem + chainPem);
+            AtomicFile.WriteAllBytesNoBackup(files.Pfx, pfx);
+        });
 
         if (item.CertificateThumbprintHash != leaf.Thumbprint) item.CertificatePreviousThumbprintHash = item.CertificateThumbprintHash;
         item.CertificateThumbprintHash = leaf.Thumbprint;
@@ -614,6 +758,7 @@ public partial class CertManager
             var ctx = new DeploymentContext
             {
                 Item = item, Task = task, Files = files, Log = log, Http = _http, IsPreviewOnly = previewOnly,
+                ScriptTempFolder = _paths.Combine("temp"), // private (SYSTEM + Administrators), not C:\Windows\Temp
                 RequestSucceeded = requestOk, RequestMessage = message,
                 Parameters = MergeParameters(provider.Definition, task.Parameters),
                 Credentials = await _credentials.GetUnlockedCredentialsDictionaryAsync(task.ChallengeCredentialKey),
@@ -629,6 +774,7 @@ public partial class CertManager
                 for (var attempt = 0; attempt <= task.RetriesAllowed; attempt++)
                 {
                     try { r = await provider.ExecuteAsync(ctx, ct); }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; } // stop the task list: service stopping / cancelled
                     catch (Exception ex) { r = ActionResult.Fail(ex.Message); }
                     if (r.IsSuccess || attempt == task.RetriesAllowed) break;
                     log.Warn($"Task {task.TaskName} failed ({r.Message}), retrying in {task.RetryDelaySeconds}s");
@@ -870,7 +1016,14 @@ public partial class CertManager
             {
                 ct.ThrowIfCancellationRequested();
                 if (IsRequestInProgress(item.Id)) continue;
-                results.Add(await PerformCertificateRequestAsync(item.Id, ct));
+                // One item failing in an unexpected way must not stop the renewal of the others.
+                try { results.Add(await PerformCertificateRequestAsync(item.Id, ct)); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Renewal of {Name} failed unexpectedly", item.Name);
+                    results.Add(new CertificateRequestResult { ManagedItem = item, Message = ex.Message });
+                }
             }
         }
         finally { _renewAllLock.Release(); }

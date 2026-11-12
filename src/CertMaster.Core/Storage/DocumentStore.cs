@@ -1,7 +1,11 @@
 using CertMaster.Models;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace CertMaster.Core.Storage;
+
+/// <summary>The database file failed SQLite's integrity check.</summary>
+public class DatabaseCorruptException(string message) : InvalidOperationException(message);
 
 /// <summary>
 /// Minimal JSON document store on SQLite: one table per collection, (id TEXT PK, json TEXT, updated TEXT).
@@ -18,9 +22,10 @@ public class DocumentStore
     public DocumentStore(string databasePath)
     {
         _databasePath = databasePath;
+        // Private cache (the default): shared-cache mode uses table locks that busy_timeout does not wait for (SQLITE_LOCKED).
         _connectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = databasePath, Cache = SqliteCacheMode.Shared, DefaultTimeout = 30, Pooling = true,
+            DataSource = databasePath, DefaultTimeout = 30, Pooling = true,
         }.ToString();
         using var c = Open();
         using var cmd = c.CreateCommand();
@@ -29,7 +34,72 @@ public class DocumentStore
         using var check = c.CreateCommand();
         check.CommandText = "PRAGMA quick_check;";
         var result = check.ExecuteScalar() as string;
-        if (result != "ok") throw new InvalidOperationException($"Database integrity check failed for {databasePath}: {result}. Restore a backup from the 'backups' folder.");
+        if (result != "ok") throw new DatabaseCorruptException($"Database integrity check failed for {databasePath}: {result}.");
+    }
+
+    /// <summary>
+    /// Opens the database; when it is damaged, moves it aside and restores the newest backup that passes the integrity check.
+    /// An unattended server then keeps renewing certificates (losing only changes since that backup) instead of failing to
+    /// start. With no usable backup the damaged file is left in place and this throws, so the service never starts on an
+    /// empty database by accident.
+    /// </summary>
+    public static DocumentStore OpenWithRecovery(string databasePath, string backupFolder, ILogger? logger = null)
+    {
+        try { return new DocumentStore(databasePath); }
+        catch (Exception ex) when (IsCorruption(ex))
+        {
+            logger?.LogCritical(ex, "Database {Path} is damaged; looking for a backup in {Folder}", databasePath, backupFolder);
+            var backups = Directory.Exists(backupFolder)
+                ? new DirectoryInfo(backupFolder).GetFiles("*.db").Where(f => f.Length > 0).OrderByDescending(f => f.LastWriteTimeUtc).ToList()
+                : new List<FileInfo>();
+            if (backups.Count == 0)
+                throw new InvalidOperationException($"The database {databasePath} is damaged and there is no backup in {backupFolder}. Restore a copy of the file, or move it away to start with an empty configuration.", ex);
+
+            SqliteConnection.ClearAllPools();
+            var damaged = $"{databasePath}.damaged-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
+            MoveDatabase(databasePath, damaged);
+            foreach (var backup in backups)
+            {
+                try
+                {
+                    File.Copy(backup.FullName, databasePath, overwrite: true);
+                    var store = new DocumentStore(databasePath);
+                    logger?.LogCritical("Database restored from backup {Backup} (taken {Taken:u}). Changes made after that backup are lost. The damaged database was kept as {Damaged}",
+                        backup.FullName, backup.LastWriteTimeUtc, damaged);
+                    store.RestoredFromBackup = backup.FullName;
+                    return store;
+                }
+                catch (Exception rex) when (IsCorruption(rex))
+                {
+                    logger?.LogError(rex, "Backup {Backup} is not usable either", backup.FullName);
+                    SqliteConnection.ClearAllPools();
+                    DeleteDatabaseFiles(databasePath);
+                }
+            }
+            // Nothing usable: put the damaged file back so the next start fails the same way rather than starting empty.
+            DeleteDatabaseFiles(databasePath);
+            MoveDatabase(damaged, databasePath);
+            throw new InvalidOperationException($"The database {databasePath} is damaged and none of the {backups.Count} backups in {backupFolder} could be opened.", ex);
+        }
+    }
+
+    /// <summary>Backup file the database was restored from at start-up, or null.</summary>
+    public string? RestoredFromBackup { get; private set; }
+
+    private static bool IsCorruption(Exception ex) =>
+        ex is DatabaseCorruptException
+        || ex is SqliteException { SqliteErrorCode: 11 or 26 }; // SQLITE_CORRUPT, SQLITE_NOTADB
+
+    private static void MoveDatabase(string from, string to)
+    {
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+            if (File.Exists(from + suffix)) File.Move(from + suffix, to + suffix, overwrite: true);
+    }
+
+    private static void DeleteDatabaseFiles(string path)
+    {
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+            try { File.Delete(path + suffix); } catch (IOException) { /* best effort */ }
     }
 
     private SqliteConnection Open()
@@ -47,18 +117,31 @@ public class DocumentStore
     {
         Directory.CreateDirectory(backupFolder);
         var target = Path.Combine(backupFolder, $"{Path.GetFileNameWithoutExtension(_databasePath)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
+        // Written under a temporary name and renamed when complete, so a crash or full disk never leaves a truncated file
+        // that looks like the newest backup.
+        var partial = target + ".partial";
+        try { File.Delete(partial); } catch (IOException) { /* replaced below */ }
         await _lock.WaitAsync();
         try
         {
             using var c = Open();
             using var cmd = c.CreateCommand();
             cmd.CommandText = "VACUUM INTO $path";
-            cmd.Parameters.AddWithValue("$path", target);
+            cmd.Parameters.AddWithValue("$path", partial);
             await cmd.ExecuteNonQueryAsync();
         }
+        catch
+        {
+            try { File.Delete(partial); } catch (IOException) { /* best effort */ }
+            throw;
+        }
         finally { _lock.Release(); }
-        foreach (var old in new DirectoryInfo(backupFolder).GetFiles("*.db").OrderByDescending(f => f.CreationTimeUtc).Skip(keep))
+        File.Move(partial, target, overwrite: true);
+        // Only prune once the new backup exists; never delete the last good copies after a failed backup.
+        foreach (var old in new DirectoryInfo(backupFolder).GetFiles("*.db").OrderByDescending(f => f.LastWriteTimeUtc).Skip(Math.Max(1, keep)))
             try { old.Delete(); } catch { /* ignore */ }
+        foreach (var stale in new DirectoryInfo(backupFolder).GetFiles("*.partial"))
+            try { stale.Delete(); } catch { /* ignore */ }
         return target;
     }
 

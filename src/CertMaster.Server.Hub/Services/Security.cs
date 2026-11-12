@@ -140,7 +140,8 @@ public class AuthService
         var id = SecretHash.HashToken(refreshToken);
         var stored = await _store.GetAsync<StoredRefreshToken>(RefreshTokens, id);
         if (stored == null) return null;
-        await _store.DeleteAsync(RefreshTokens, id); // rotate: one use only
+        // Rotate: one use only. Only the caller that actually deleted it wins a concurrent refresh with the same token.
+        if (!await _store.DeleteAsync(RefreshTokens, id)) return null;
         if (stored.Expiry < DateTimeOffset.UtcNow) return null;
         var user = await _store.GetAsync<StoredUser>(Users, stored.UserId);
         return user is { IsEnabled: true } ? await IssueAsync(user) : null;

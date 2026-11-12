@@ -44,16 +44,11 @@ Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\CertMaster Management Hub"; Filename: "http://localhost:{code:GetPort}/"; IconFilename: "{app}\Service\{#ServiceExe}"
 
 [Run]
-Filename: "{sys}\sc.exe"; Parameters: "description ""{#ServiceName}"" ""Web UI and API for managing certificates across CertMaster agents"""; Flags: runhidden
-Filename: "{sys}\sc.exe"; Parameters: "failure ""{#ServiceName}"" reset= 86400 actions= restart/60000/restart/60000/restart/300000"; Flags: runhidden
-Filename: "{sys}\sc.exe"; Parameters: "start ""{#ServiceName}"""; Flags: runhidden; StatusMsg: "Starting the Management Hub service..."
+; The service is created, configured and started from [Code] (ssPostInstall), so the order is guaranteed and failures are logged.
 Filename: "http://localhost:{code:GetPort}/"; Description: "Open the Management Hub"; Flags: postinstall shellexec skipifsilent nowait
 
-[UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop ""{#ServiceName}"""; Flags: runhidden; RunOnceId: "StopHub"
-Filename: "{sys}\timeout.exe"; Parameters: "/t 3 /nobreak"; Flags: runhidden; RunOnceId: "WaitHub"
-Filename: "{sys}\sc.exe"; Parameters: "delete ""{#ServiceName}"""; Flags: runhidden; RunOnceId: "DeleteHub"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#FirewallRule}"""; Flags: runhidden; RunOnceId: "DeleteFirewall"
+[UninstallDelete]
+Type: files; Name: "{app}\Service\appsettings.Installer.json"
 
 [Code]
 const DataFolder = '{commonappdata}\CertMasterHub';
@@ -69,7 +64,7 @@ end;
 procedure InitializeWizard();
 begin
   NetPage := CreateInputQueryPage(wpSelectTasks, 'Hub network settings', 'Which port should the Management Hub listen on?',
-    'Agents and browsers connect to this port. Put the hub behind HTTPS (a reverse proxy such as IIS ARR/nginx, or a Kestrel certificate) for production use.');
+    'Agents and browsers connect to this port. Put the hub behind HTTPS (a reverse proxy such as IIS ARR/nginx, or a Kestrel certificate in appsettings.Production.json) for production use.');
   NetPage.Add('&Port:', False);
   NetPage.Values[0] := GetPreviousData('HubPort', '9697');
 
@@ -104,44 +99,98 @@ function Sc(const Params: String): Integer;
 var Code: Integer;
 begin
   if not Exec(ExpandConstant('{sys}\sc.exe'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
+  Log('sc ' + Params + ' -> ' + IntToStr(Code));
   Result := Code;
 end;
 
+function ServiceExists(): Boolean;
+begin
+  Result := Sc('query "{#ServiceName}"') = 0;
+end;
+
+function ProcessRunning(): Boolean;
+var Code: Integer;
+begin
+  Exec(ExpandConstant('{sys}\cmd.exe'), '/c tasklist /NH /FI "IMAGENAME eq {#ServiceExe}" | find /I "{#ServiceExe}" >nul', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Result := Code = 0;
+end;
+
+{ Stops the service and waits for the process to exit so files can be replaced; kills it only as a last resort. }
 procedure StopService();
 var I, Code: Integer;
 begin
-  if Sc('query "{#ServiceName}"') <> 0 then exit;
-  Sc('stop "{#ServiceName}"');
-  for I := 1 to 30 do
+  if ServiceExists() then Sc('stop "{#ServiceName}"');
+  for I := 1 to 60 do
   begin
-    Exec(ExpandConstant('{sys}\cmd.exe'), '/c tasklist /FI "IMAGENAME eq {#ServiceExe}" | find /I "{#ServiceExe}" >nul', '', SW_HIDE, ewWaitUntilTerminated, Code);
-    if Code <> 0 then break;
+    if not ProcessRunning() then exit;
     Sleep(1000);
   end;
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#ServiceExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Log('Hub process still running after 60 s; terminating it.');
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM {#ServiceExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Sleep(2000);
+end;
+
+{ Versions before 1.0.2 wrote the port into appsettings.Production.json, which is the administrator's file (HTTPS and
+  Kestrel settings belong there). Remove it only when it holds nothing but that generated Hub:Url line. }
+procedure RemoveLegacyGeneratedSettings();
+var FileName, S: String; Content: AnsiString;
+begin
+  FileName := ExpandConstant('{app}\Service\appsettings.Production.json');
+  if not LoadStringFromFile(FileName, Content) then exit;
+  S := Trim(String(Content));
+  if (Pos('"Hub": { "Url": "http://', S) > 0) and (Pos('Kestrel', S) = 0) and (Length(S) < 120) then
+  begin
+    Log('Removing installer-generated ' + FileName);
+    DeleteFile(FileName);
+  end;
+end;
+
+procedure ConfigureService();
+var BinPath, Host, Json: String; Code: Integer;
+begin
+  RemoveLegacyGeneratedSettings();
+  { '*' listens on all IPv4 and IPv6 addresses. }
+  if BindPage.SelectedValueIndex = 1 then Host := 'localhost' else Host := '*';
+  Json := '{' + #13#10 + '  "Hub": { "Url": "http://' + Host + ':' + GetPort('') + '" }' + #13#10 + '}' + #13#10;
+  if not SaveStringToFile(ExpandConstant('{app}\Service\appsettings.Installer.json'), Json, False) then
+    Log('Could not write appsettings.Installer.json');
+
+  BinPath := ExpandConstant('{app}\Service\{#ServiceExe}');
+  if ServiceExists() then
+    Code := Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem')
+  else
+    Code := Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem DisplayName= "{#ServiceName}"');
+  if Code <> 0 then
+  begin
+    if not WizardSilent() then
+      MsgBox('The Management Hub service could not be registered (sc.exe exit code ' + IntToStr(Code) + '). See the setup log for details.', mbError, MB_OK);
+    exit;
+  end;
+  Sc('description "{#ServiceName}" "Web UI and API for managing certificates across CertMaster agents"');
+  { Restart after a crash or a non-zero exit (failureflag 1), at 1 min, 1 min, then every 5 min; the counter resets daily. }
+  Sc('failure "{#ServiceName}" reset= 86400 actions= restart/60000/restart/60000/restart/300000');
+  Sc('failureflag "{#ServiceName}" 1');
+
+  { Firewall rule scoped to the hub executable and port. }
+  Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="{#FirewallRule}"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  if WizardIsTaskSelected('firewall') and (BindPage.SelectedValueIndex = 0) then
+  begin
+    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall add rule name="{#FirewallRule}" dir=in action=allow protocol=TCP localport=' + GetPort('') +
+      ' program="' + BinPath + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Log('netsh advfirewall add rule -> ' + IntToStr(Code));
+  end;
+
+  Code := Sc('start "{#ServiceName}"');
+  { 1056 = already running }
+  if (Code <> 0) and (Code <> 1056) and not WizardSilent() then
+    MsgBox('The Management Hub service was installed but did not start (sc.exe exit code ' + IntToStr(Code) + ').' + #13#10 +
+      'Check that port ' + GetPort('') + ' is free, then see ' + ExpandConstant(DataFolder) + '\logs\hub.log and the Application event log.', mbError, MB_OK);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var BinPath, Host, Json: String; Code: Integer;
 begin
   if CurStep = ssInstall then StopService();
-  if CurStep = ssPostInstall then
-  begin
-    if BindPage.SelectedValueIndex = 1 then Host := 'localhost' else Host := '0.0.0.0';
-    Json := '{' + #13#10 + '  "Hub": { "Url": "http://' + Host + ':' + GetPort('') + '" }' + #13#10 + '}' + #13#10;
-    SaveStringToFile(ExpandConstant('{app}\Service\appsettings.Production.json'), Json, False);
-
-    BinPath := ExpandConstant('{app}\Service\{#ServiceExe}');
-    if Sc('query "{#ServiceName}"') = 0 then
-      Sc('config "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem')
-    else
-      Sc('create "{#ServiceName}" binPath= "\"' + BinPath + '\"" start= delayed-auto obj= LocalSystem DisplayName= "{#ServiceName}"');
-
-    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="{#FirewallRule}"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-    if WizardIsTaskSelected('firewall') and (BindPage.SelectedValueIndex = 0) then
-      Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall add rule name="{#FirewallRule}" dir=in action=allow protocol=TCP localport=' + GetPort(''),
-        '', SW_HIDE, ewWaitUntilTerminated, Code);
-  end;
+  if CurStep = ssPostInstall then ConfigureService();
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
@@ -152,7 +201,15 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var Code: Integer;
 begin
+  if CurUninstallStep = usUninstall then
+  begin
+    { Before files are removed: stop the service, wait for it, then delete it and its firewall rule. }
+    StopService();
+    if ServiceExists() then Sc('delete "{#ServiceName}"');
+    Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="{#FirewallRule}"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  end;
   if CurUninstallStep = usPostUninstall then
     if DirExists(ExpandConstant(DataFolder)) and not UninstallSilent() then
       if MsgBox('Also delete Management Hub data (users, joined instances, settings) in ' + ExpandConstant(DataFolder) + '?',

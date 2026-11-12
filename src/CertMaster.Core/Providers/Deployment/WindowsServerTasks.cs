@@ -321,7 +321,8 @@ public class KeyPermissionsTask : DeploymentTaskProviderBase
             {
                 using var store = new X509Store(storeName, StoreLocation.LocalMachine);
                 store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
-                var found = store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, false);
+                var found = CertificateStoreHelper.Find(store, thumbprint);
+                for (var i = 1; i < found.Count; i++) found[i].Dispose();
                 if (found.Count > 0) return found[0];
             }
             catch (CryptographicException) { /* store does not exist */ }
@@ -368,15 +369,97 @@ public class PortBindingTask : DeploymentTaskProviderBase
         Id = "CertMaster.Deploy.PortBinding",
         Title = "Update Port Binding (experimental)",
         DefaultTitle = "Update HTTP.sys Port Binding",
-        Description = "Replace the HTTP.sys SSL certificate binding for an IP:port (netsh http delete/add sslcert) so self-hosted HTTPS services use the new certificate.",
+        Description = "Point the HTTP.sys SSL certificate binding for an IP:port at the new certificate (netsh http update sslcert, or add when there is no binding yet) so self-hosted HTTPS services use it.",
         IsExperimental = true,
-        UsageNote = "Experimental. Existing binding settings other than the certificate and app id are not preserved.",
+        UsageNote = "Experimental. Binding options other than the certificate, app id and store (client certificate negotiation etc.) may be reset to their defaults.",
         ProviderParameters =
         {
             new ProviderParameter { Key = "ipport", Name = "IP:Port", Value = "0.0.0.0:443", IsRequired = true, Description = "e.g. 0.0.0.0:443, 10.0.0.5:8443 or [::]:443" },
-            new ProviderParameter { Key = "appid", Name = "Application ID (GUID, optional)", Description = "Blank = generate a new GUID" },
+            new ProviderParameter { Key = "appid", Name = "Application ID (GUID, optional)", Description = "Blank = keep the existing binding's application ID (a new GUID when there is no binding)" },
         }
     };
+
+    /// <summary>An existing HTTP.sys binding as reported by "netsh http show sslcert".</summary>
+    public sealed record SslCertBinding(string CertificateHash, Guid? AppId, string? CertStoreName);
+
+    public static string[] ShowArgs(string ipport) => new[] { "http", "show", "sslcert", $"ipport={ipport}" };
+    public static string[] DeleteArgs(string ipport) => new[] { "http", "delete", "sslcert", $"ipport={ipport}" };
+
+    /// <summary>Arguments for "netsh http add|update sslcert".</summary>
+    public static string[] SetArgs(string verb, string ipport, string certHash, Guid appId, string? certStoreName = null) => new[]
+    {
+        "http", verb, "sslcert", $"ipport={ipport}", $"certhash={certHash}", $"appid={{{appId}}}", $"certstorename={(string.IsNullOrWhiteSpace(certStoreName) ? "MY" : certStoreName.Trim())}",
+    };
+
+    private static readonly Regex HashValue = new(@"^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$", RegexOptions.CultureInvariant);
+    private static readonly Regex GuidValue = new(@"^\{[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\}$", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Parses "netsh http show sslcert" output. Uses the English labels when present and otherwise the value shapes (a hex hash,
+    /// a {GUID}), so localized Windows works too. Returns null when the output shows no binding.
+    /// </summary>
+    public static SslCertBinding? ParseShowSslCert(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        string? hash = null, labelledHash = null, store = null;
+        Guid? appId = null, labelledAppId = null;
+        foreach (var raw in output.Split('\n'))
+        {
+            var sep = raw.IndexOf(" : ", StringComparison.Ordinal);
+            if (sep < 0) continue;
+            var label = raw[..sep].Trim();
+            var value = raw[(sep + 3)..].Trim();
+            if (label.Equals("Certificate Hash", StringComparison.OrdinalIgnoreCase) && HashValue.IsMatch(value)) labelledHash = value;
+            else if (label.Equals("Application ID", StringComparison.OrdinalIgnoreCase) && Guid.TryParse(value, out var a)) labelledAppId = a;
+            else if (label.Equals("Certificate Store Name", StringComparison.OrdinalIgnoreCase) && value.Length > 0 && !value.Equals("(null)", StringComparison.OrdinalIgnoreCase)) store = value;
+            if (hash == null && HashValue.IsMatch(value)) hash = value;
+            if (appId == null && GuidValue.IsMatch(value) && Guid.TryParse(value, out var g)) appId = g;
+        }
+        hash = labelledHash ?? hash;
+        return hash == null ? null : new SslCertBinding(hash.ToUpperInvariant(), labelledAppId ?? appId, store);
+    }
+
+    /// <summary>
+    /// Points the binding at the certificate: "update" when a binding exists (keeping its app id unless one is configured),
+    /// otherwise "add". If update fails the binding is replaced (delete + add), and when that add fails the previous certificate
+    /// is bound again so the endpoint is never left without one.
+    /// </summary>
+    internal static async Task<ActionResult> ApplyBindingAsync(DeploymentContext ctx, Func<string[], CancellationToken, Task<ProcessResult>> netsh,
+        string ipport, string thumbprint, Guid? configuredAppId, CancellationToken ct)
+    {
+        const string elevated = "The agent must run elevated.";
+        var existing = ParseShowSslCert((await netsh(ShowArgs(ipport), ct)).Output);
+        var appId = configuredAppId ?? existing?.AppId ?? Guid.NewGuid();
+        if (existing == null)
+        {
+            var add = await netsh(SetArgs("add", ipport, thumbprint, appId), ct);
+            return add.ExitCode == 0
+                ? Ok(ctx, $"Bound {ipport} to certificate {thumbprint} (appid {{{appId}}})")
+                : Fail(ctx, $"netsh http add sslcert failed (exit code {add.ExitCode}): {PowerShellHelper.Summarize(add)}. {elevated}");
+        }
+        if (string.Equals(existing.CertificateHash, thumbprint, StringComparison.OrdinalIgnoreCase) && existing.AppId == appId)
+            return Ok(ctx, $"{ipport} is already bound to certificate {thumbprint} (appid {{{appId}}})");
+
+        ctx.Log.Info($"Existing binding for {ipport}: certificate {existing.CertificateHash}" + (existing.AppId is { } old ? $", appid {{{old}}}" : ""));
+        var update = await netsh(SetArgs("update", ipport, thumbprint, appId), ct);
+        if (update.ExitCode == 0)
+            return Ok(ctx, $"Updated {ipport} from certificate {existing.CertificateHash} to {thumbprint} (appid {{{appId}}})");
+
+        ctx.Log.Warn($"netsh http update sslcert failed (exit code {update.ExitCode}): {PowerShellHelper.Summarize(update)}. Replacing the binding instead.");
+        var del = await netsh(DeleteArgs(ipport), ct);
+        if (del.ExitCode != 0)
+            return Fail(ctx, $"Could not update or remove the binding for {ipport} (exit code {del.ExitCode}): {PowerShellHelper.Summarize(del)}. It still uses certificate {existing.CertificateHash}. {elevated}");
+
+        // From here the endpoint has no certificate: finish (or roll back) even if the task is being cancelled.
+        var readd = await netsh(SetArgs("add", ipport, thumbprint, appId), CancellationToken.None);
+        if (readd.ExitCode == 0)
+            return Ok(ctx, $"Replaced the binding for {ipport}: certificate {thumbprint} (appid {{{appId}}})");
+        var restore = await netsh(SetArgs("add", ipport, existing.CertificateHash, existing.AppId ?? appId, existing.CertStoreName), CancellationToken.None);
+        return Fail(ctx, $"netsh http add sslcert failed (exit code {readd.ExitCode}): {PowerShellHelper.Summarize(readd)}. " +
+                         (restore.ExitCode == 0
+                             ? $"The previous binding (certificate {existing.CertificateHash}) was restored."
+                             : $"Restoring the previous binding (certificate {existing.CertificateHash}) also failed: {PowerShellHelper.Summarize(restore)}. {ipport} has no certificate binding now. {elevated}"));
+    }
 
     /// <summary>Normalizes and validates an ip:port for netsh. Returns null when invalid.</summary>
     public static string? NormalizeIpPort(string? value)
@@ -399,26 +482,18 @@ public class PortBindingTask : DeploymentTaskProviderBase
     public override async Task<ActionResult> ExecuteAsync(DeploymentContext ctx, CancellationToken ct)
     {
         var ipport = NormalizeIpPort(ctx.Param("ipport") ?? "0.0.0.0:443")!;
-        var appId = ctx.Param("appid") is { } a ? Guid.Parse(a) : Guid.NewGuid();
+        Guid? appId = ctx.Param("appid") is { } a ? Guid.Parse(a) : null;
         var thumbprint = ctx.Item.CertificateThumbprintHash;
-        if (ctx.IsPreviewOnly) return Preview(ctx, $"Would bind {ipport} to certificate {thumbprint ?? "(not issued yet)"} (appid {{{appId}}}) with netsh http");
+        if (ctx.IsPreviewOnly)
+            return Preview(ctx, $"Would bind {ipport} to certificate {thumbprint ?? "(not issued yet)"} " +
+                                (appId is { } id ? $"(appid {{{id}}})" : "(keeping the existing binding's appid)") + " with netsh http");
         if (!OperatingSystem.IsWindows()) return Fail(ctx, "HTTP.sys bindings are only available on Windows.");
         if (thumbprint == null || !PowerShellHelper.IsThumbprint(thumbprint)) return Fail(ctx, "No certificate has been issued yet. Request the certificate first.");
         if (!PowerShellHelper.IsInMachineStore(thumbprint))
             return Fail(ctx, $"Certificate {thumbprint} is not in LocalMachine\\My. Add a 'Deploy to Certificate Store (Local Machine)' task before this one.");
 
-        return await Guard(ctx, "Port binding", async () =>
-        {
-            var timeout = TimeSpan.FromMinutes(1);
-            var del = await ProcessRunner.RunAsync("netsh.exe", new[] { "http", "delete", "sslcert", $"ipport={ipport}" }, null, timeout, ct);
-            ctx.Log.Info(del.ExitCode == 0 ? $"Removed existing binding for {ipport}" : $"No existing binding removed for {ipport}");
-            var add = await ProcessRunner.RunAsync("netsh.exe", new[]
-            {
-                "http", "add", "sslcert", $"ipport={ipport}", $"certhash={thumbprint}", $"appid={{{appId}}}", "certstorename=MY",
-            }, null, timeout, ct);
-            return add.ExitCode == 0
-                ? Ok(ctx, $"Bound {ipport} to certificate {thumbprint} (appid {{{appId}}})")
-                : Fail(ctx, $"netsh http add sslcert failed (exit code {add.ExitCode}): {PowerShellHelper.Summarize(add)}. The agent must run elevated.");
-        }, ct);
+        return await Guard(ctx, "Port binding", () => ApplyBindingAsync(ctx,
+            (args, token) => ProcessRunner.RunAsync("netsh.exe", args, null, TimeSpan.FromMinutes(1), token),
+            ipport, thumbprint, appId, ct), ct);
     }
 }
