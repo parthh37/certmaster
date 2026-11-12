@@ -177,7 +177,7 @@ public sealed class IisServerProvider : IWebServerProvider
         try { return ImportWindows(pfxPath, pfxPassword, friendlyNamePrefix); }
         catch (Exception ex) when (ex is CryptographicException or UnauthorizedAccessException)
         {
-            return new ActionResult<string> { Message = $"Could not import the certificate into LocalMachine\\{CertificateStoreName}: {ex.Message}. {AdminHint}" };
+            return new ActionResult<string> { Message = $"Could not import the certificate into LocalMachine\\{CertificateStoreName}: {ex.Message.TrimEnd('.')}. {AdminHint}" };
         }
     }, ct);
 

@@ -278,6 +278,10 @@ public partial class CertManager
         {
             var msg = ex is AcmeRequestException are ? $"ACME error: {are.Error?.Detail ?? are.Message}" : ex.Message;
             if (ex is OperationCanceledException) msg = "Request cancelled.";
+            if (ex.ToString().Contains("accountDoesNotExist", StringComparison.Ordinal))
+                msg = "The ACME account no longer exists at the CA (it was deactivated, or the CA was reset). Register the account again in Settings > Certificate Authorities.";
+            else if (ex is AggregateException agg && agg.InnerException != null && msg.StartsWith("One or more errors"))
+                msg = agg.InnerException is AcmeRequestException inner ? $"ACME error: {inner.Error?.Detail ?? inner.Message}" : agg.InnerException.Message;
             item.LastRenewalStatus = RequestState.Error;
             item.RenewalFailureCount++;
             item.RenewalFailureMessage = msg;
