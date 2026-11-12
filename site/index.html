@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CertMaster: free ACME certificate manager for Windows</title>
+<meta name="description" content="CertMaster requests, renews and deploys TLS certificates from Let's Encrypt and other ACME CAs on Windows servers, with IIS binding, 23 deployment tasks and a web-based Management Hub. Free and MIT licensed.">
+<meta property="og:title" content="CertMaster">
+<meta property="og:description" content="Free, open-source ACME certificate manager for Windows servers.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="#top" aria-label="CertMaster home">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <span>CertMaster</span>
+    </a>
+    <nav class="topnav" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#validation">Validation</a>
+      <a href="#deployment">Deployment</a>
+      <a href="#hub">Hub</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/parthh37/certmaster" class="gh">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Open source &middot; MIT licensed &middot; Windows 10 / Server 2019+</p>
+      <h1>TLS certificates for Windows servers, issued, renewed and deployed for you.</h1>
+      <p class="lede">CertMaster gets certificates from Let's Encrypt or any other ACME authority, binds them to IIS,
+        pushes them to the other services that need them, and renews them before they expire. A web-based
+        Management Hub runs the same work across all of your servers from one place.</p>
+      <div class="cta">
+        <a class="btn primary" id="dl-agent" href="https://github.com/parthh37/certmaster/releases/latest">Download CertMaster</a>
+        <a class="btn" id="dl-hub" href="https://github.com/parthh37/certmaster/releases/latest">Download the Hub</a>
+      </div>
+      <p class="release-line" id="release-line">Latest release on <a href="https://github.com/parthh37/certmaster/releases">GitHub Releases</a>.</p>
+      <p class="fine">No license keys, no evaluation limits, no paid tiers. Self-contained installers: no .NET install needed.</p>
+    </div>
+    <div class="hero-card" aria-hidden="true">
+      <div class="card-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="card-title">Certificates</span></div>
+      <ul class="cert-list">
+        <li><span class="badge ok">Valid</span><b>www.example.com</b><small>Let's Encrypt &middot; renews in 41 days</small></li>
+        <li><span class="badge ok">Valid</span><b>*.corp.example.net</b><small>dns-01 &middot; Cloudflare &middot; ECDSA P-256</small></li>
+        <li><span class="badge warn">Renewing</span><b>mail.example.org</b><small>Deploy to Exchange &middot; Restart service</small></li>
+        <li><span class="badge ok">Valid</span><b>rdgw.example.com</b><small>RD Gateway &middot; RDP listener</small></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="strip">
+  <div class="wrap stats">
+    <div><b>6</b><span>built-in ACME CAs, plus any custom one</span></div>
+    <div><b>110+</b><span>DNS providers for dns-01 validation</span></div>
+    <div><b>23</b><span>deployment task types</span></div>
+    <div><b>2</b><span>apps: per-server agent and central Hub</span></div>
+  </div>
+</section>
+
+<section id="components" class="block">
+  <div class="wrap">
+    <h2>Two pieces that work alone or together</h2>
+    <div class="two">
+      <article class="panel">
+        <h3>CertMaster</h3>
+        <p class="sub">Windows service + desktop app, installed on each server</p>
+        <ul class="ticks">
+          <li>Does the ACME work: orders, validation, issuance, revocation.</li>
+          <li>Renews on schedule in the background, with no one signed in.</li>
+          <li>Applies certificates to IIS and runs your deployment tasks.</li>
+          <li>Desktop app (WPF) for creating, testing and previewing requests, with live progress and per-certificate logs.</li>
+          <li>Local REST API and live status feed on <code>127.0.0.1:9696</code>, protected by a local API key.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>CertMaster Management Hub</h3>
+        <p class="sub">Windows service + web UI, installed once</p>
+        <ul class="ticks">
+          <li>One dashboard and editor for the certificates on every server.</li>
+          <li>Agents connect <em>out</em> to the Hub, so managed servers need no inbound firewall rule.</li>
+          <li>Users with Administrator, CertificateManager and Viewer roles.</li>
+          <li>The Hub never stores provider secrets: they stay encrypted on each agent.</li>
+          <li>OpenAPI reference at <code>/docs</code>.</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="block alt">
+  <div class="wrap">
+    <h2>Certificates</h2>
+    <p class="intro">Everything RFC 8555 offers, with sensible defaults and a full plan of what will happen before it happens.</p>
+    <div class="grid">
+      <article class="feat">
+        <h3>Any ACME authority</h3>
+        <p>Let's Encrypt, ZeroSSL, Google Trust Services, SSL.com, Sectigo and Actalis are built in. Add custom or
+          internal CAs such as step-ca. External Account Binding (EAB) is supported.</p>
+      </article>
+      <article class="feat">
+        <h3>Every certificate shape</h3>
+        <p>Multi-domain (SAN), wildcard and IP-address certificates. RSA 2048, 3072 and 4096 or ECDSA P-256 and P-384
+          keys, with optional private-key reuse.</p>
+      </article>
+      <article class="feat">
+        <h3>Modern ACME options</h3>
+        <p>Preferred chain selection, ACME profiles such as <code>shortlived</code>, and ARI (RFC 9773) replacement
+          orders so the CA can tell you when to renew.</p>
+      </article>
+      <article class="feat">
+        <h3>Automatic renewal</h3>
+        <p>Renew a set number of days before expiry, or at one third of the lifetime for short-lived certificates.
+          Failures retry with exponential back-off.</p>
+      </article>
+      <article class="feat">
+        <h3>Test and Preview</h3>
+        <p><b>Test</b> runs dry checks of validation and deployment. <b>Preview</b> shows the full plan: domains,
+          challenges, bindings to add or change, and the tasks that will run.</p>
+      </article>
+      <article class="feat">
+        <h3>Revoke and export</h3>
+        <p>Revoke a certificate with the CA, export it as PFX or PEM, and read the request log for every certificate.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="validation" class="block">
+  <div class="wrap">
+    <h2>Domain validation</h2>
+    <div class="two">
+      <article class="panel">
+        <h3>http-01</h3>
+        <ul class="ticks">
+          <li>A built-in http.sys listener that shares port 80 with IIS, so nothing extra needs to open.</li>
+          <li>Or write challenge files to a web root you choose.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>dns-01</h3>
+        <ul class="ticks">
+          <li>Native integrations with the providers listed below.</li>
+          <li>About 95 more through the bundled <a href="https://github.com/rmbolger/Posh-ACME">Posh-ACME</a> plugins.</li>
+          <li>acme-dns, or your own scripts.</li>
+          <li>CNAME delegation rules, and propagation checks against the zone's authoritative nameservers before the CA is asked to validate.</li>
+        </ul>
+      </article>
+    </div>
+
+    <h3 class="list-head">Native DNS providers</h3>
+    <ul class="chips" id="native-dns">
+      <li>acme-dns</li><li>Alibaba Cloud (Aliyun)</li><li>Amazon Route 53</li><li>Azure DNS</li><li>Cloudflare</li>
+      <li>DigitalOcean</li><li>DNS Made Easy</li><li>GoDaddy</li><li>Hetzner</li><li>IONOS</li><li>Linode</li>
+      <li>Microsoft DNS Server (Windows)</li><li>Namecheap</li><li>OVHcloud</li><li>Simple DNS Plus</li><li>TransIP</li>
+      <li>Custom script</li>
+    </ul>
+
+    <details class="more">
+      <summary>Posh-ACME plugins bundled with CertMaster <span id="posh-count"></span></summary>
+      <label class="search"><span class="sr">Filter plugins</span>
+        <input type="search" id="posh-filter" placeholder="Filter plugins, e.g. Gandi" autocomplete="off">
+      </label>
+      <ul class="chips small" id="posh-list"></ul>
+    </details>
+  </div>
+</section>
+
+<section id="deployment" class="block alt">
+  <div class="wrap">
+    <h2>Deployment</h2>
+    <p class="intro">Bind the new certificate to IIS automatically, then hand it to everything else that needs it.</p>
+
+    <div class="two">
+      <article class="panel">
+        <h3>IIS, automatically</h3>
+        <ul class="ticks">
+          <li>Modes: Auto, Single Site, All Sites, Certificate Store Only, or No Deployment.</li>
+          <li>Add or update https bindings, or update existing bindings only.</li>
+          <li>Match existing bindings by hostname, by blank hostname, or by previous certificate.</li>
+          <li>SNI bindings or specific IP and port.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>Deployment tasks</h3>
+        <ul class="ticks">
+          <li>Triggers: on success, on error, always, or manual.</li>
+          <li>Retries and run-if-previous-failed options.</li>
+          <li>Targets: the local machine, a Windows network share (UNC), or a remote host over SSH/SFTP.</li>
+          <li>Placeholders such as <code>{PrimaryDomain}</code>, <code>{Thumbprint}</code> and <code>{CertificatePath}</code> in arguments.</li>
+        </ul>
+      </article>
+    </div>
+
+    <h3 class="list-head">All 23 task types</h3>
+    <div class="tasks">
+      <div>
+        <h4>Windows and Microsoft</h4>
+        <ul>
+          <li>Deploy to Certificate Store (Local Machine)</li>
+          <li>Deploy to Centralized Certificate Store (CCS)</li>
+          <li>Deploy to Microsoft Exchange (2013+)</li>
+          <li>Deploy to ADFS</li>
+          <li>Deploy to RDP Gateway Service</li>
+          <li>Deploy to RDP Listener Service</li>
+          <li>Deploy to RAS (DirectAccess, VPN, SSTP)</li>
+          <li>Set Certificate Key Permissions</li>
+          <li>Update Port Binding (http.sys, experimental)</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Web servers and files</h4>
+        <ul>
+          <li>Deploy to Apache</li>
+          <li>Deploy to nginx</li>
+          <li>Deploy to Tomcat</li>
+          <li>Deploy to Generic Server (multi-purpose)</li>
+          <li>Export Certificate (PFX, PEM and more)</li>
+        </ul>
+        <h4>Cloud and secrets</h4>
+        <ul>
+          <li>Deploy to Azure App Service</li>
+          <li>Deploy to Azure Key Vault</li>
+          <li>Deploy to HashiCorp Vault</li>
+          <li>Deploy to Doppler</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Scripts and automation</h4>
+        <ul>
+          <li>Run PowerShell Script</li>
+          <li>Run a program or command</li>
+          <li>Webhook</li>
+          <li>Restart, stop or start a service</li>
+          <li>Wait for N seconds</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="hub" class="block">
+  <div class="wrap">
+    <h2>Management Hub</h2>
+    <p class="intro">A browser UI for every server you manage. Agents dial out to the Hub over SignalR; the Hub sends
+      commands and receives progress and summaries back.</p>
+    <div class="grid">
+      <article class="feat"><h3>Dashboard</h3><p>Every instance and certificate at a glance: what expires within 14 days, which renewals failed and why, and what renews next.</p></article>
+      <article class="feat"><h3>Certificates</h3><p>Browse, create, edit, test, request and renew certificates on any connected server: domains, keys, authorization, IIS deployment and tasks.</p></article>
+      <article class="feat"><h3>Instances</h3><p>Create expiring, revocable joining keys. Join a server from its CertMaster settings in a few clicks.</p></article>
+      <article class="feat"><h3>Accounts and credentials</h3><p>Manage ACME accounts and stored provider credentials on each agent. Secrets are write-only and never returned.</p></article>
+      <article class="feat"><h3>Users and roles</h3><p>Administrator, CertificateManager and Viewer. PBKDF2 password hashes, JWT with rotating refresh tokens, and sign-in rate limits.</p></article>
+      <article class="feat"><h3>API</h3><p>Everything in the UI is in the REST API, documented with OpenAPI at <code>/docs</code>.</p></article>
+    </div>
+
+    <figure class="arch">
+<pre aria-label="Architecture diagram">
+ Desktop app ──HTTP + SignalR (local API key)──▶ Agent service ──ACME──▶ Certificate authority
+                                                     │  ▲
+                              outbound SignalR        │  │ commands, progress, summaries
+                                                     ▼  │
+ Browser ──HTTPS (JWT)──▶ Management Hub (API + web UI)
+</pre>
+      <figcaption>Managed servers only make outbound connections. Provider secrets never leave the agent.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="security" class="block alt">
+  <div class="wrap">
+    <h2>Operations and security</h2>
+    <div class="grid">
+      <article class="feat"><h3>Encrypted credentials</h3><p>Stored credentials are encrypted with Windows DPAPI and never returned by the API or shown in a UI.</p></article>
+      <article class="feat"><h3>Locked-down data</h3><p>The data folder is restricted to SYSTEM and Administrators.</p></article>
+      <article class="feat"><h3>Self-healing</h3><p>Daily database backups, an integrity check at startup, crash-safe settings files and service crash recovery.</p></article>
+      <article class="feat"><h3>Safe edits</h3><p>Certificates with a request in progress are protected from conflicting edits, and task problems show as warnings before you run.</p></article>
+      <article class="feat"><h3>Clear errors</h3><p>Missing ACME accounts and wrapped CA failures are reported in plain language, with the underlying ACME problem kept in the log.</p></article>
+      <article class="feat"><h3>Tested</h3><p>Hundreds of unit tests run in CI on every change, plus end-to-end issuance against Pebble, Let's Encrypt's test CA.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="block">
+  <div class="wrap">
+    <h2>Install</h2>
+    <div class="two">
+      <article class="panel">
+        <h3>Installers</h3>
+        <table class="dl">
+          <thead><tr><th>Installer</th><th>Installs</th></tr></thead>
+          <tbody>
+            <tr><td><code>certmaster-windows-x64-&lt;version&gt;.exe</code></td><td>The CertMaster Agent service and the desktop app (optional). The desktop app runs as Administrator.</td></tr>
+            <tr><td><code>certmaster-hub-windows-x64-&lt;version&gt;.exe</code></td><td>The Management Hub service. Setup asks for the port (default 9697) and can open the firewall.</td></tr>
+          </tbody>
+        </table>
+        <p class="fine">Both are self-contained and support Windows 10 / Server 2019 or later. Uninstalling asks before removing data.</p>
+      </article>
+      <article class="panel">
+        <h3>First steps</h3>
+        <ol class="steps">
+          <li>Open CertMaster. In <b>Settings &rsaquo; Certificate Authorities</b>, register an ACME account.</li>
+          <li>Click <b>New Certificate</b>. Pick an IIS site or type domains, choose how they are validated
+            (<b>Authorization</b>), review <b>Deployment</b> and <b>Tasks</b>, then click <b>Test</b> and
+            <b>Request Certificate</b>.</li>
+          <li>Optional: open the Hub, sign in as <code>admin</code> with the password from
+            <code>C:\ProgramData\CertMasterHub\initial-admin-password.txt</code>, and change it. Create a joining key
+            under <b>Instances</b>, then join from each server's <b>Settings &rsaquo; Management Hub</b>.</li>
+        </ol>
+        <p class="fine">Put production Hub deployments behind HTTPS (a reverse proxy or Kestrel certificate configuration).</p>
+      </article>
+    </div>
+
+    <h3 class="list-head">Build from source</h3>
+<pre class="code"><code>dotnet build CertMaster.sln
+dotnet test CertMaster.sln
+./build/publish.ps1    # tests, self-contained publish to ./dist, then both installers</code></pre>
+    <p class="fine">Needs the .NET 10 SDK on Windows, and Inno Setup 6 for the installers.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <p>CertMaster is free software under the <a href="https://github.com/parthh37/certmaster/blob/main/LICENSE">MIT License</a>.
+      Bundled components keep their own licenses.</p>
+    <p><a href="https://github.com/parthh37/certmaster">Source</a> &middot;
+      <a href="https://github.com/parthh37/certmaster/releases">Releases</a> &middot;
+      <a href="https://github.com/parthh37/certmaster/issues">Issues</a></p>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
