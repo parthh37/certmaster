@@ -1,0 +1,230 @@
+@page "/admin/updates"
+@implements IDisposable
+@inject HubClient Hub
+@inject HubSession Session
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Updates - CertMaster</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Updates</MudText>
+    <MudSpacer />
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="@(() => Load(false))" />
+</MudStack>
+
+@if (!Session.IsAdmin)
+{
+    <MudAlert Severity="Severity.Info">Only administrators can manage updates.</MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="1">
+        <MudText Typo="Typo.h6">Management Hub</MudText>
+        @if (_hub != null)
+        {
+            <UpdateStatusLine Status="_hub" />
+            <MudStack Row="true" Class="mt-3" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Search" Disabled="_busy" OnClick="CheckHub">Check now</MudButton>
+                @if (_hub.IsUpdateAvailable)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                               Disabled="@(_busy || !_hub.CanInstall || IsActive(_hub))" OnClick="InstallHub">Install @_hub.LatestVersion</MudButton>
+                }
+                @if (_hub.ReleaseUrl != null)
+                {
+                    <MudButton Variant="Variant.Text" Href="@_hub.ReleaseUrl" Target="_blank" EndIcon="@Icons.Material.Filled.OpenInNew">Release notes</MudButton>
+                }
+            </MudStack>
+        }
+        @if (_hubSettings != null)
+        {
+            <MudDivider Class="my-4" />
+            <UpdateSettingsEditor Settings="_hubSettings" OnSave="SaveHubSettings" Busy="_busy" />
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudText Typo="Typo.h6">Agents</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Each agent checks for updates itself and installs them when automatic updates are on. Installing restarts the agent service;
+            it waits for running certificate requests to finish first.
+        </MudText>
+        <MudTable T="AgentRow" Items="_agents" Dense="true" Hover="true" Loading="_loading">
+            <HeaderContent>
+                <MudTh>Instance</MudTh><MudTh>Version</MudTh><MudTh>Latest</MudTh><MudTh>Status</MudTh><MudTh>Automatic</MudTh><MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Instance.Title</MudTd>
+                <MudTd>@(context.Status?.CurrentVersion ?? context.Instance.ClientVersion)</MudTd>
+                <MudTd>
+                    @if (context.Status?.IsUpdateAvailable == true)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Text="@context.Status.LatestVersion" />
+                    }
+                    else { @context.Status?.LatestVersion }
+                </MudTd>
+                <MudTd><MudText Typo="Typo.caption">@(context.Error ?? (context.Instance.IsConnected ? context.Status?.Message : "Offline"))</MudText></MudTd>
+                <MudTd>
+                    @if (context.Settings != null)
+                    {
+                        <MudSwitch T="bool" Value="context.Settings.InstallAutomatically" ValueChanged="@(v => SetAgentAutomatic(context, v))" Color="Color.Primary" Disabled="_busy" />
+                    }
+                </MudTd>
+                <MudTd>
+                    @if (context.Instance.IsConnected)
+                    {
+                        <MudTooltip Text="Check now"><MudIconButton Icon="@Icons.Material.Filled.Search" Size="Size.Small" Disabled="_busy" OnClick="@(() => CheckAgent(context))" /></MudTooltip>
+                        @if (context.Status is { IsUpdateAvailable: true } s)
+                        {
+                            <MudTooltip Text="@($"Install {s.LatestVersion}")">
+                                <MudIconButton Icon="@Icons.Material.Filled.SystemUpdateAlt" Size="Size.Small" Color="Color.Primary"
+                                               Disabled="@(_busy || !s.CanInstall || IsActive(s))" OnClick="@(() => InstallAgent(context))" />
+                            </MudTooltip>
+                        }
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent><MudText>No instances have joined this hub yet.</MudText></NoRecordsContent>
+        </MudTable>
+        @if (_agents.Any(a => a.Status is { IsUpdateAvailable: true, CanInstall: true }))
+        {
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt" Disabled="_busy" OnClick="InstallAllAgents">
+                Update all agents
+            </MudButton>
+        }
+    </MudPaper>
+}
+
+@code {
+    private sealed class AgentRow
+    {
+        public required ManagedInstanceInfo Instance { get; init; }
+        public UpdateStatus? Status { get; set; }
+        public UpdateSettings? Settings { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private UpdateStatus? _hub;
+    private UpdateSettings? _hubSettings;
+    private List<AgentRow> _agents = new();
+    private bool _loading, _busy;
+    private Timer? _poll;
+
+    private static bool IsActive(UpdateStatus s) => s.State is UpdateState.Checking or UpdateState.Downloading or UpdateState.Installing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load(false);
+        // While something is downloading or installing, refresh so progress and the restart are visible.
+        _poll = new Timer(async _ =>
+        {
+            if (_hub != null && IsActive(_hub) || _agents.Any(a => a.Status != null && IsActive(a.Status)))
+                await InvokeAsync(async () => { await Load(quiet: true); StateHasChanged(); });
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+
+
+    private async Task Load(bool quiet)
+    {
+        if (!Session.IsAdmin) return;
+        _loading = !quiet;
+        try
+        {
+            try { _hub = await Hub.GetHubUpdateStatusAsync(); _hubSettings ??= await Hub.GetHubUpdateSettingsAsync(); }
+            catch (Exception ex) when (quiet) { _hub = _hub == null ? null : new UpdateStatus { CurrentVersion = _hub.CurrentVersion, State = UpdateState.Installing, Message = "Hub is restarting... (" + ex.Message + ")" }; }
+
+            var instances = await Hub.GetInstancesAsync();
+            var rows = instances.Select(i => new AgentRow { Instance = i }).ToList();
+            await Task.WhenAll(rows.Where(r => r.Instance.IsConnected).Select(async r =>
+            {
+                try
+                {
+                    r.Status = await Hub.GetInstanceUpdateStatusAsync(r.Instance.InstanceId);
+                    r.Settings = await Hub.GetInstanceUpdateSettingsAsync(r.Instance.InstanceId);
+                }
+                catch (Exception ex) { r.Error = ex.Message; }
+            }));
+            _agents = rows;
+        }
+        catch (Exception ex) { if (!quiet) Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        _busy = true;
+        try { await action(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private Task CheckHub() => Run(async () =>
+    {
+        _hub = await Hub.CheckHubUpdatesAsync();
+        Snackbar.Add(_hub.Message ?? "", _hub.State == UpdateState.Failed ? Severity.Error : Severity.Info);
+    });
+
+    private Task InstallHub() => Run(async () =>
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Update the hub",
+                $"Download and install CertMaster Management Hub {_hub?.LatestVersion}? The hub restarts during setup, so this page will be unavailable for a minute or two.",
+                yesText: "Install", cancelText: "Cancel") != true) return;
+        var r = await Hub.InstallHubUpdateAsync();
+        Snackbar.Add(r.Message ?? "", r.IsSuccess ? Severity.Info : Severity.Error);
+        await Load(quiet: true);
+    });
+
+    private Task SaveHubSettings(UpdateSettings s) => Run(async () =>
+    {
+        _hubSettings = await Hub.SaveHubUpdateSettingsAsync(s);
+        Snackbar.Add("Hub update settings saved", Severity.Success);
+    });
+
+    private Task CheckAgent(AgentRow row) => Run(async () =>
+    {
+        row.Status = await Hub.CheckInstanceUpdatesAsync(row.Instance.InstanceId);
+        row.Error = null;
+    });
+
+    private Task InstallAgent(AgentRow row) => Run(async () =>
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Update agent",
+                $"Install CertMaster {row.Status?.LatestVersion} on {row.Instance.Title}? The agent service restarts during setup.",
+                yesText: "Install", cancelText: "Cancel") != true) return;
+        var r = await Hub.InstallInstanceUpdateAsync(row.Instance.InstanceId);
+        Snackbar.Add($"{row.Instance.Title}: {r.Message}", r.IsSuccess ? Severity.Info : Severity.Error);
+        await Load(quiet: true);
+    });
+
+    private Task InstallAllAgents() => Run(async () =>
+    {
+        var targets = _agents.Where(a => a.Instance.IsConnected && a.Status is { IsUpdateAvailable: true, CanInstall: true } s && !IsActive(s)).ToList();
+        if (targets.Count == 0) return;
+        if (await Dialogs.ShowMessageBoxAsync("Update all agents",
+                $"Install the latest version on {targets.Count} agent(s)? Each agent service restarts during setup, after its running requests finish.",
+                yesText: "Install", cancelText: "Cancel") != true) return;
+        foreach (var t in targets)
+        {
+            try
+            {
+                var r = await Hub.InstallInstanceUpdateAsync(t.Instance.InstanceId);
+                Snackbar.Add($"{t.Instance.Title}: {r.Message}", r.IsSuccess ? Severity.Info : Severity.Warning);
+            }
+            catch (Exception ex) { Snackbar.Add($"{t.Instance.Title}: {ex.Message}", Severity.Error); }
+        }
+        await Load(quiet: true);
+    });
+
+    private Task SetAgentAutomatic(AgentRow row, bool value) => Run(async () =>
+    {
+        if (row.Settings == null) return;
+        row.Settings.InstallAutomatically = value;
+        if (value) row.Settings.CheckForUpdates = true;
+        row.Settings = await Hub.SaveInstanceUpdateSettingsAsync(row.Instance.InstanceId, row.Settings);
+        Snackbar.Add($"{row.Instance.Title}: automatic updates {(value ? "on" : "off")}", Severity.Success);
+    });
+
+    public void Dispose() => _poll?.Dispose();
+}

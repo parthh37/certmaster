@@ -136,7 +136,21 @@ public class HubClient
         GetAsync<List<ManagedCertificate>>("api/v1/hub/items" + (string.IsNullOrWhiteSpace(search) ? "" : "?search=" + E(search)));
 
     // ---------- instance: certificates ----------
+    // hub self-update
+    public Task<UpdateStatus> GetHubUpdateStatusAsync() => GetAsync<UpdateStatus>("api/v1/hub/updates");
+    public Task<UpdateStatus> CheckHubUpdatesAsync() => PostAsync<UpdateStatus>("api/v1/hub/updates/check");
+    public Task<ActionResult> InstallHubUpdateAsync() => PostAsync<ActionResult>("api/v1/hub/updates/install");
+    public Task<UpdateSettings> GetHubUpdateSettingsAsync() => GetAsync<UpdateSettings>("api/v1/hub/updates/settings");
+    public Task<UpdateSettings> SaveHubUpdateSettingsAsync(UpdateSettings s) => PostAsync<UpdateSettings>("api/v1/hub/updates/settings", s);
+
     private static string I(string iid) => $"api/v1/instances/{E(iid)}";
+
+    // agent updates (proxied to the instance)
+    public Task<UpdateStatus> GetInstanceUpdateStatusAsync(string iid) => GetAsync<UpdateStatus>($"{I(iid)}/system/updates");
+    public Task<UpdateStatus> CheckInstanceUpdatesAsync(string iid) => PostAsync<UpdateStatus>($"{I(iid)}/system/updates/check");
+    public Task<ActionResult> InstallInstanceUpdateAsync(string iid) => PostAsync<ActionResult>($"{I(iid)}/system/updates/install");
+    public Task<UpdateSettings> GetInstanceUpdateSettingsAsync(string iid) => GetAsync<UpdateSettings>($"{I(iid)}/system/updates/settings");
+    public Task<UpdateSettings> SaveInstanceUpdateSettingsAsync(string iid, UpdateSettings s) => PostAsync<UpdateSettings>($"{I(iid)}/system/updates/settings", s);
     public Task<ManagedCertificate> GetItemAsync(string iid, string id) => GetAsync<ManagedCertificate>($"{I(iid)}/certificates/{E(id)}");
     public Task<ActionResult<ManagedCertificate>> SaveItemAsync(string iid, ManagedCertificate item) => PostAsync<ActionResult<ManagedCertificate>>($"{I(iid)}/certificates", item);
     public Task<bool> DeleteItemAsync(string iid, string id) => DeleteAsync<bool>($"{I(iid)}/certificates/{E(id)}");

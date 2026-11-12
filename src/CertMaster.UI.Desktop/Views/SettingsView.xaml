@@ -131,6 +131,45 @@
                 </Grid>
             </TabItem>
 
+            <!-- Updates -->
+            <TabItem Header="Updates">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16,4" MaxWidth="620" HorizontalAlignment="Left"
+                                DataContext="{Binding DataContext.Updates, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <TextBlock Text="Updates" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="14" />
+                        <TextBlock Text="{Binding LastCheckedText}" Style="{StaticResource Hint}" />
+                        <TextBlock Text="{Binding Status.Message}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Check for Updates" Style="{StaticResource ToolButton}" Command="{Binding CheckCommand}" />
+                            <Button Content="Install Update" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}"
+                                    Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
+                            <Button Content="Release Notes" Style="{StaticResource ToolButton}" Command="{Binding OpenReleaseNotesCommand}" />
+                            <mah:ProgressRing IsActive="{Binding IsWorking}" Width="20" Height="20" Margin="10,0" />
+                        </StackPanel>
+                        <TextBlock Text="This copy was not installed with the CertMaster installer, so it cannot update itself." Style="{StaticResource Hint}" Foreground="OrangeRed"
+                                   Visibility="{Binding Status.CanInstall, Converter={StaticResource InverseBoolToVis}}" />
+
+                        <TextBlock Text="Automatic Updates" Style="{StaticResource SectionTitle}" Margin="0,20,0,4" />
+                        <mah:ToggleSwitch Content="Check for updates automatically" IsOn="{Binding Settings.CheckForUpdates}" />
+                        <mah:ToggleSwitch Content="Install updates automatically" IsOn="{Binding Settings.InstallAutomatically}" IsEnabled="{Binding Settings.CheckForUpdates}" />
+                        <mah:ToggleSwitch Content="Include pre-release versions" IsOn="{Binding Settings.IncludePrereleases}" />
+                        <TextBlock Text="Check every (hours)" Style="{StaticResource FieldLabel}" />
+                        <mah:NumericUpDown Value="{Binding Settings.CheckIntervalHours}" Minimum="1" Maximum="168" Width="140" HorizontalAlignment="Left" />
+                        <TextBlock Text="Install automatically only between these hours (local time; the same hour for both means any time)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal">
+                            <mah:NumericUpDown Value="{Binding Settings.InstallWindowStartHour}" Minimum="0" Maximum="23" Width="110" />
+                            <TextBlock Text="to" VerticalAlignment="Center" Margin="8,0" />
+                            <mah:NumericUpDown Value="{Binding Settings.InstallWindowEndHour}" Minimum="0" Maximum="23" Width="110" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="The agent service downloads the installer from GitHub Releases, checks it against the SHA-256 digest GitHub publishes, and runs it silently. It waits for running certificate requests to finish, and starts the service again even if setup fails." />
+                        <Button Content="Save Update Settings" Margin="0,12,0,0" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}" />
+                        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Management Hub -->
             <TabItem Header="Management Hub">
                 <StackPanel Margin="16,4" MaxWidth="600" HorizontalAlignment="Left">

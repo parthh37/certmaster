@@ -1,5 +1,6 @@
 using CertMaster.Core;
 using CertMaster.Core.Providers.Dns;
+using CertMaster.Core.Updates;
 using CertMaster.Models;
 
 namespace CertMaster.Server.Core;
@@ -26,6 +27,11 @@ public static class AgentApi
             var all = sr.ReadToEnd().Split('\n');
             return Results.Ok(all.TakeLast(lines ?? 500));
         });
+        api.MapGet("/system/updates", (UpdateManager u) => u.GetStatus());
+        api.MapPost("/system/updates/check", (UpdateManager u, CancellationToken ct) => u.CheckAsync(ct));
+        api.MapPost("/system/updates/install", (UpdateManager u, IHostApplicationLifetime life) => u.BeginInstallAsync(life.ApplicationStopping));
+        api.MapGet("/system/updates/settings", (UpdateManager u) => u.GetSettingsAsync());
+        api.MapPost("/system/updates/settings", (UpdateManager u, UpdateSettings s) => u.SetSettingsAsync(s));
         api.MapGet("/preferences", (CertManager m) => m.GetPreferencesAsync());
         api.MapPost("/preferences", async (CertManager m, Preferences p) => { await m.SetPreferencesAsync(p); return ActionResult.Ok("Preferences saved"); });
         api.MapPost("/preferences/notifications/test", (CertManager m, TestNotificationRequest r) => m.SendTestNotificationAsync(r.Url));

@@ -27,11 +27,13 @@ public partial class MainViewModel : ObservableObject
     public Catalog Catalog { get; } = new();
     public AgentClient Client => _client;
     public SettingsViewModel Settings { get; }
+    public UpdatesViewModel Updates { get; }
 
     public MainViewModel(AgentClient client)
     {
         _client = client;
         Settings = new SettingsViewModel(client);
+        Updates = new UpdatesViewModel(client);
         _client.ProgressReceived += s => Ui(() => OnProgress(s));
         _client.ManagedCertificateUpdated += i => Ui(() => OnItemUpdated(i));
         _client.ConnectionStateChanged += s => Ui(() => ConnectionState = s);
@@ -67,6 +69,7 @@ public partial class MainViewModel : ObservableObject
             await _client.ConnectStatusAsync();
             await ReloadCatalogAsync();
             await RefreshAsync();
+            await Updates.InitializeAsync();
             if ((await _client.GetAccountsAsync()).Count == 0)
                 StatusText = "No ACME account yet: open Settings > Certificate Authorities to register one.";
         }

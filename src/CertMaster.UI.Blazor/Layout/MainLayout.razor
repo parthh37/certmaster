@@ -25,6 +25,14 @@ else
             <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
             <MudText Typo="Typo.h6">CertMaster Management Hub</MudText>
             <MudSpacer />
+            @if (Session.IsAdmin && _update is { IsUpdateAvailable: true })
+            {
+                <MudTooltip Text="@($"Management Hub {_update.LatestVersion} is available")">
+                    <MudButton Href="/admin/updates" Color="Color.Inherit" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.NewReleases" Class="mr-2">
+                        Update available
+                    </MudButton>
+                </MudTooltip>
+            }
             <MudIconButton Icon="@(_dark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="() => _dark = !_dark" />
             <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                 <MudMenuItem Disabled="true">@Session.Username</MudMenuItem>
@@ -43,6 +51,7 @@ else
                     @if (Session.IsAdmin)
                     {
                         <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users &amp; Roles</MudNavLink>
+                        <MudNavLink Href="/admin/updates" Icon="@Icons.Material.Filled.SystemUpdateAlt">Updates</MudNavLink>
                     }
                 </MudNavGroup>
                 <MudNavLink Href="/docs" ForceLoad="true" Target="_blank" Icon="@Icons.Material.Filled.Api">API Reference</MudNavLink>
@@ -71,9 +80,18 @@ else
         Nav.LocationChanged += OnLocation;
         _ready = true;
         Guard();
+        await LoadUpdateAsync();
     }
 
-    private void OnChanged() { Guard(); InvokeAsync(StateHasChanged); }
+    private UpdateStatus? _update;
+
+    private async Task LoadUpdateAsync()
+    {
+        if (!Session.IsAuthenticated) return;
+        try { _update = await Hub.GetHubUpdateStatusAsync(); } catch { _update = null; }
+    }
+
+    private void OnChanged() { Guard(); InvokeAsync(async () => { await LoadUpdateAsync(); StateHasChanged(); }); }
     private void OnLocation(object? s, LocationChangedEventArgs e) => Guard();
 
     private void Guard()

@@ -53,6 +53,11 @@ try
     builder.Services.AddSingleton<AuthService>();
     builder.Services.AddSingleton<InstanceRegistry>();
     builder.Services.AddSingleton<InstanceGateway>();
+    builder.Services.AddSingleton(sp => new CertMaster.Core.Updates.UpdateManager(CertMaster.Core.Updates.UpdateProduct.Hub,
+        typeof(HubApi).Assembly.GetName().Version?.ToString(3) ?? "1.0.0", paths, sp.GetRequiredService<DocumentStore>(),
+        logger: sp.GetRequiredService<ILogger<CertMaster.Core.Updates.UpdateManager>>(),
+        releasesUrl: builder.Configuration["Updates:ReleasesUrl"]));
+    builder.Services.AddHostedService<UpdateBackgroundService>();
     builder.Services.AddHostedService<HubMaintenanceService>();
     builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(30));
 

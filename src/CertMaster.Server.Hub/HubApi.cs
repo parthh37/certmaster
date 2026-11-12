@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CertMaster.Core.Updates;
 using CertMaster.Models;
 using CertMaster.Models.Hub;
 using CertMaster.Server.Hub.Services;
@@ -50,6 +51,14 @@ public static class HubApi
             .RequireAuthorization(HubPolicies.Manage);
         api.MapDelete("/hub/instances/{id}", async (InstanceRegistry r, string id) => new ActionResult(await r.RemoveInstanceAsync(id), "Instance removed"))
             .RequireAuthorization(HubPolicies.Admin);
+
+        // hub self-update (status visible to all users, actions admin only)
+        api.MapGet("/hub/updates", (UpdateManager u) => u.GetStatus());
+        var hubUpdates = api.MapGroup("/hub/updates").RequireAuthorization(HubPolicies.Admin);
+        hubUpdates.MapPost("/check", (UpdateManager u, CancellationToken ct) => u.CheckAsync(ct));
+        hubUpdates.MapPost("/install", (UpdateManager u, IHostApplicationLifetime life) => u.BeginInstallAsync(life.ApplicationStopping));
+        hubUpdates.MapGet("/settings", (UpdateManager u) => u.GetSettingsAsync());
+        hubUpdates.MapPost("/settings", (UpdateManager u, UpdateSettings s) => u.SetSettingsAsync(s));
 
         // joining keys (admin)
         var keys = api.MapGroup("/hub/joiningkeys").RequireAuthorization(HubPolicies.Admin);
@@ -106,6 +115,11 @@ public static class HubApi
         inst.MapPost("/accounts", (InstanceGateway g, string iid, NewAccountRequest r) => Proxy(g, iid, InstanceCommands.AddAccount, r, 120)).RequireAuthorization(HubPolicies.Manage);
         inst.MapDelete("/accounts/{key}", (InstanceGateway g, string iid, string key) => Proxy(g, iid, InstanceCommands.RemoveAccount, new { id = key })).RequireAuthorization(HubPolicies.Manage);
         inst.MapGet("/system/version", (InstanceGateway g, string iid) => Proxy(g, iid, InstanceCommands.GetSystemVersion, null));
+        inst.MapGet("/system/updates", (InstanceGateway g, string iid) => Proxy(g, iid, InstanceCommands.GetUpdateStatus, null));
+        inst.MapPost("/system/updates/check", (InstanceGateway g, string iid) => Proxy(g, iid, InstanceCommands.CheckForUpdates, null, 90)).RequireAuthorization(HubPolicies.Admin);
+        inst.MapPost("/system/updates/install", (InstanceGateway g, string iid) => Proxy(g, iid, InstanceCommands.InstallUpdate, null, 90)).RequireAuthorization(HubPolicies.Admin);
+        inst.MapGet("/system/updates/settings", (InstanceGateway g, string iid) => Proxy(g, iid, InstanceCommands.GetUpdateSettings, null)).RequireAuthorization(HubPolicies.Admin);
+        inst.MapPost("/system/updates/settings", (InstanceGateway g, string iid, UpdateSettings s) => Proxy(g, iid, InstanceCommands.SetUpdateSettings, s)).RequireAuthorization(HubPolicies.Admin);
         inst.MapPost("/certificates/preview", (InstanceGateway g, string iid, ManagedCertificate item) => Proxy(g, iid, InstanceCommands.GeneratePreview, item, 120)).RequireAuthorization(HubPolicies.Manage);
         inst.MapPost("/certificates/{id}/tasks/{taskId}/execute", (InstanceGateway g, string iid, string id, string taskId, bool? preview) =>
             Proxy(g, iid, InstanceCommands.PerformDeploymentTask, new { id, taskId, preview = preview ?? false }, 300)).RequireAuthorization(HubPolicies.Manage);
