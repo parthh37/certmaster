@@ -178,6 +178,65 @@
         <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _item.RequestConfig.Challenges.Add(new CertRequestChallengeConfig { ChallengeProvider = "HTTP01.BuiltIn" }))">Add authorization config</MudButton>
     </MudTabPanel>
 
+    <MudTabPanel Text="Deployment" Icon="@Icons.Material.Filled.Dns">
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Certificates can be applied to IIS bindings on the instance automatically, or deployed with tasks. @_serverStatusText
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudSelect T="string" Value="_item.ServerSiteId" ValueChanged="OnSiteChanged" Label="Website (IIS site)" Variant="Variant.Outlined" Clearable="true" Disabled="_sites.Count == 0" Class="mb-3">
+                    @foreach (var s in _sites) { <MudSelectItem T="string" Value="@s.Id">@s.Name</MudSelectItem> }
+                </MudSelect>
+                <MudSelect T="DeploymentOption" @bind-Value="_item.RequestConfig.DeploymentSiteOption" Label="Deployment mode" Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem T="DeploymentOption" Value="DeploymentOption.Auto">Auto</MudSelectItem>
+                    <MudSelectItem T="DeploymentOption" Value="DeploymentOption.SingleSite">Single site (selected above)</MudSelectItem>
+                    <MudSelectItem T="DeploymentOption" Value="DeploymentOption.AllSites">All sites</MudSelectItem>
+                    <MudSelectItem T="DeploymentOption" Value="DeploymentOption.CertificateStoreOnly">Certificate store only</MudSelectItem>
+                    <MudSelectItem T="DeploymentOption" Value="DeploymentOption.NoDeployment">No deployment</MudSelectItem>
+                </MudSelect>
+                <MudSelect T="DeploymentBindingOption" @bind-Value="_item.RequestConfig.DeploymentBindingOption" Label="Binding add/update" Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem T="DeploymentBindingOption" Value="DeploymentBindingOption.AddOrUpdate">Add or update https bindings as required</MudSelectItem>
+                    <MudSelectItem T="DeploymentBindingOption" Value="DeploymentBindingOption.UpdateOnly">Update existing https bindings only</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2">Update existing bindings matching any of:</MudText>
+                <MudCheckBox T="bool" @bind-Value="_item.RequestConfig.DeploymentBindingMatchHostname" Label="Binding hostname matches certificate domains" />
+                <MudCheckBox T="bool" @bind-Value="_item.RequestConfig.DeploymentBindingBlankHostname" Label="Binding hostname not specified (IP only / all unassigned)" />
+                <MudCheckBox T="bool" @bind-Value="_item.RequestConfig.DeploymentBindingReplacePrevious" Label="Binding uses the previous version of this certificate" />
+                <MudText Typo="Typo.subtitle2" Class="mt-3">New bindings</MudText>
+                <MudRadioGroup T="bool" @bind-Value="_item.RequestConfig.UseSpecificBindingIPPort">
+                    <MudRadio T="bool" Value="false">Auto create/update bindings (SNI)</MudRadio>
+                    <MudRadio T="bool" Value="true">Use specific IP/port</MudRadio>
+                </MudRadioGroup>
+                @if (_item.RequestConfig.UseSpecificBindingIPPort)
+                {
+                    <MudStack Row="true">
+                        <MudTextField @bind-Value="_item.RequestConfig.BindingIPAddress" Label="IP (* = all)" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudNumericField T="int" @bind-Value="_item.RequestConfig.BindingPort" Label="Port" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudCheckBox T="bool" @bind-Value="_item.RequestConfig.BindingUseSNI" Label="SNI" />
+                    </MudStack>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Preview" Icon="@Icons.Material.Filled.PlayCircleOutline" OnClick="LoadPreview">
+        <MudStack Row="true" Class="mb-2"><MudText Typo="Typo.body2">What a request would do with the current (unsaved) settings. Nothing is changed.</MudText><MudSpacer /><MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadPreview">Refresh</MudButton></MudStack>
+        @if (_preview == null) { <MudProgressLinear Indeterminate="true" /> }
+        else
+        {
+            @foreach (var s in _preview)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mb-2">
+                    <MudText Typo="Typo.subtitle1" Color="@(s.HasError ? Color.Error : Color.Default)">@s.Title</MudText>
+                    <MudText Typo="Typo.body2">@s.Description</MudText>
+                    @foreach (var sub in s.Substeps) { <MudText Typo="Typo.body2" Class="ml-4">• <b>@sub.Title</b> @sub.Description</MudText> }
+                </MudPaper>
+            }
+        }
+    </MudTabPanel>
+
     <MudTabPanel Text="Tasks" Icon="@Icons.Material.Filled.PlaylistPlay">
         @TaskList("Deployment tasks (after request)", _item.PostRequestTasks, false)
         <MudDivider Class="my-4" />
@@ -244,6 +303,13 @@
             var t4 = Hub.GetAuthoritiesAsync(InstanceId);
             var t5 = Hub.GetAccountsAsync(InstanceId);
             _challengeProviders = await t1; _deploymentProviders = await t2; _credentials = await t3; _authorities = await t4; _accounts = await t5;
+            try
+            {
+                var status = await Hub.GetServerStatusAsync(InstanceId);
+                _serverStatusText = status.IsIisAvailable ? $"IIS {status.IisVersion} detected on this instance." : (status.Message ?? "IIS not detected on this instance.");
+                if (status.IsIisAvailable) _sites = await Hub.GetSitesAsync(InstanceId);
+            }
+            catch { _serverStatusText = "Could not query the instance's web server."; }
 
             _item = IsNew
                 ? new ManagedCertificate { RequestConfig = new CertRequestConfig { Challenges = { new CertRequestChallengeConfig { ChallengeProvider = "HTTP01.BuiltIn" } } } }
@@ -358,6 +424,60 @@
         _newTaskType = null;
     }
 
+    private List<SiteInfo> _sites = new();
+    private string _serverStatusText = "";
+    private List<ActionStep>? _preview;
+
+    private async Task OnSiteChanged(string? siteId)
+    {
+        _item!.ServerSiteId = siteId;
+        if (siteId == null) return;
+        try
+        {
+            var options = await Hub.GetSiteDomainsAsync(InstanceId, siteId);
+            var existing = new HashSet<string>(_item.GetAllDomains(), StringComparer.OrdinalIgnoreCase);
+            var add = options.Where(o => o.IsSelected && !existing.Contains(o.Domain)).Select(o => o.Domain).ToList();
+            if (string.IsNullOrWhiteSpace(_item.RequestConfig.PrimaryDomain) && add.Count > 0) { _item.RequestConfig.PrimaryDomain = add[0]; add.RemoveAt(0); }
+            if (add.Count > 0) _sanText = string.Join("\n", _sanText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Concat(add));
+            if (add.Count > 0 || options.Count > 0) Snackbar.Add($"Loaded {options.Count} hostname(s) from the site bindings", Severity.Info);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task LoadPreview()
+    {
+        ApplyText();
+        _preview = null;
+        try { _preview = await Hub.PreviewItemAsync(InstanceId, _item!); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); _preview = new(); }
+    }
+
+    private async Task RunTask(DeploymentTaskConfig task)
+    {
+        if (IsNew) { Snackbar.Add("Save the certificate first", Severity.Warning); return; }
+        try
+        {
+            var r = await Hub.RunTaskAsync(InstanceId, Id, task.Id);
+            Snackbar.Add($"{task.TaskName}: {r.Message}", r.IsSuccess ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private static readonly Dictionary<DeploymentContextType, string> TargetTitles = new()
+    {
+        [DeploymentContextType.LocalAsService] = "Local (as the CertMaster service)",
+        [DeploymentContextType.LocalAsUser] = "Local (as a specific Windows user)",
+        [DeploymentContextType.WindowsNetwork] = "Windows network share (UNC)",
+        [DeploymentContextType.SSH] = "Remote host via SSH / SFTP",
+    };
+
+    private static string? TaskCredentialType(DeploymentTaskConfig t, DeploymentProviderDefinition? def) => t.TargetType switch
+    {
+        DeploymentContextType.SSH => "SSH",
+        DeploymentContextType.WindowsNetwork or DeploymentContextType.LocalAsUser => "Windows",
+        _ => def?.CredentialType,
+    };
+
     private RenderFragment TaskList(string title, List<DeploymentTaskConfig> tasks, bool pre) => __builder =>
     {
         <MudText Typo="Typo.h6" Class="mb-2">@title</MudText>
@@ -383,7 +503,19 @@
                             <MudSwitch T="bool" @bind-Value="task.IsFatalOnError" Label="Stop remaining tasks if this fails" />
                             <MudSwitch T="bool" @bind-Value="task.RunIfLastStepFailed" Label="Run even if a previous task failed" />
                         </MudItem>
-                        @if (def?.CredentialType is { } ct)
+                        @if (def != null && def.SupportedTargets.Count > 1)
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudSelect T="DeploymentContextType" @bind-Value="task.TargetType" Label="Target" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var tt in def.SupportedTargets) { <MudSelectItem T="DeploymentContextType" Value="tt">@TargetTitles[tt]</MudSelectItem> }
+                                </MudSelect>
+                            </MudItem>
+                            @if (task.TargetType == DeploymentContextType.SSH)
+                            {
+                                <MudItem xs="12" md="6"><MudTextField @bind-Value="task.TargetHost" Label="Remote host (host or host:port)" Variant="Variant.Outlined" Margin="Margin.Dense" /></MudItem>
+                            }
+                        }
+                        @if (TaskCredentialType(task, def) is { } ct)
                         {
                             <MudItem xs="12" md="6">
                                 <MudSelect T="string" @bind-Value="task.ChallengeCredentialKey" Label="Credentials" Variant="Variant.Outlined" Margin="Margin.Dense">
@@ -404,6 +536,7 @@
                         }
                     </MudGrid>
                     <MudStack Row="true" Class="mt-2">
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => RunTask(task))" Disabled="IsNew">Run now</MudButton>
                         <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@(() => tasks.Remove(task))">Remove task</MudButton>
                     </MudStack>
                 </MudExpansionPanel>

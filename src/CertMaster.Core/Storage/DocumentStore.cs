@@ -13,20 +13,53 @@ public class DocumentStore
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly HashSet<string> _ensured = new();
 
+    private readonly string _databasePath;
+
     public DocumentStore(string databasePath)
     {
-        _connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath, Cache = SqliteCacheMode.Shared }.ToString();
+        _databasePath = databasePath;
+        _connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath, Cache = SqliteCacheMode.Shared, DefaultTimeout = 30, Pooling = true,
+        }.ToString();
         using var c = Open();
         using var cmd = c.CreateCommand();
-        cmd.CommandText = "PRAGMA journal_mode=WAL;";
+        cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;";
         cmd.ExecuteNonQuery();
+        using var check = c.CreateCommand();
+        check.CommandText = "PRAGMA quick_check;";
+        var result = check.ExecuteScalar() as string;
+        if (result != "ok") throw new InvalidOperationException($"Database integrity check failed for {databasePath}: {result}. Restore a backup from the 'backups' folder.");
     }
 
     private SqliteConnection Open()
     {
         var c = new SqliteConnection(_connectionString);
         c.Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "PRAGMA busy_timeout=10000;";
+        cmd.ExecuteNonQuery();
         return c;
+    }
+
+    /// <summary>Writes a consistent copy of the database (safe while in use) and keeps the newest <paramref name="keep"/> backups.</summary>
+    public async Task<string> BackupAsync(string backupFolder, int keep = 14)
+    {
+        Directory.CreateDirectory(backupFolder);
+        var target = Path.Combine(backupFolder, $"{Path.GetFileNameWithoutExtension(_databasePath)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
+        await _lock.WaitAsync();
+        try
+        {
+            using var c = Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "VACUUM INTO $path";
+            cmd.Parameters.AddWithValue("$path", target);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        finally { _lock.Release(); }
+        foreach (var old in new DirectoryInfo(backupFolder).GetFiles("*.db").OrderByDescending(f => f.CreationTimeUtc).Skip(keep))
+            try { old.Delete(); } catch { /* ignore */ }
+        return target;
     }
 
     private static string Table(string collection) =>

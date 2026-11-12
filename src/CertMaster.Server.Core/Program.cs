@@ -38,9 +38,22 @@ builder.Services.AddSingleton<InstanceCommandHandler>();
 builder.Services.AddSingleton<HubClientService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HubClientService>());
 builder.Services.AddHostedService<RenewalBackgroundService>();
+builder.Services.AddHostedService<MaintenanceService>();
 builder.Services.AddSingleton<SignalRProgressReporter>();
+builder.Services.AddProblemDetails();
+// Give running certificate requests time to finish cleanly when the service stops.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(60));
 
 var app = builder.Build();
+
+// Unexpected errors become JSON problem responses (logged), never a crashed request or leaked stack trace.
+app.UseExceptionHandler(errorApp => errorApp.Run(async ctx =>
+{
+    var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    Log.Error(ex, "Unhandled API error on {Path}", ctx.Request.Path);
+    ctx.Response.StatusCode = ex is ArgumentException or InvalidOperationException ? 400 : 500;
+    await ctx.Response.WriteAsJsonAsync(new { title = "Request failed", detail = ex?.Message, status = ctx.Response.StatusCode });
+}));
 
 // wire progress reporting (SignalR + hub forwarding) into the engine
 app.Services.GetRequiredService<CertManager>().ProgressReporter = app.Services.GetRequiredService<SignalRProgressReporter>();

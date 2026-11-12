@@ -147,6 +147,11 @@ public class HubClient
     public Task<RequestProgressState?> GetItemProgressAsync(string iid, string id) => GetAsync<RequestProgressState?>($"{I(iid)}/certificates/{E(id)}/progress");
     public Task<(byte[] data, string fileName)> DownloadItemAsync(string iid, string id, CertificateDownloadFormat format) => DownloadAsync($"{I(iid)}/certificates/{E(id)}/download?format={format}");
     public Task<ActionResult> RenewAllAsync(string iid) => PostAsync<ActionResult>($"{I(iid)}/renewall");
+    public Task<List<ActionStep>> PreviewItemAsync(string iid, ManagedCertificate item) => PostAsync<List<ActionStep>>($"{I(iid)}/certificates/preview", item);
+    public Task<ActionResult> RunTaskAsync(string iid, string id, string taskId) => PostAsync<ActionResult>($"{I(iid)}/certificates/{E(id)}/tasks/{E(taskId)}/execute");
+    public Task<ServerStatus> GetServerStatusAsync(string iid) => GetAsync<ServerStatus>($"{I(iid)}/server/status");
+    public Task<List<SiteInfo>> GetSitesAsync(string iid) => GetAsync<List<SiteInfo>>($"{I(iid)}/server/sites");
+    public Task<List<DomainOption>> GetSiteDomainsAsync(string iid, string siteId) => GetAsync<List<DomainOption>>($"{I(iid)}/server/sites/{E(siteId)}/domains");
 
     // ---------- instance: providers, credentials, accounts ----------
     public Task<List<ChallengeProviderDefinition>> GetChallengeProvidersAsync(string iid) => GetAsync<List<ChallengeProviderDefinition>>($"{I(iid)}/providers/challenges");
