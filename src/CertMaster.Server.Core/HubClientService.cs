@@ -1,5 +1,6 @@
 using CertMaster.Core;
 using CertMaster.Core.Storage;
+using CertMaster.Hosting;
 using CertMaster.Models;
 using CertMaster.Models.Hub;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -49,7 +50,11 @@ public class HubClientService : BackgroundService
         Signal();
     }
 
-    private void Signal() { if (_changed.CurrentCount == 0) _changed.Release(); }
+    private void Signal()
+    {
+        try { _changed.Release(); }
+        catch (SemaphoreFullException) { /* a change is already pending */ }
+    }
 
     public async Task ForwardProgressAsync(RequestProgressState state)
     {
@@ -70,31 +75,38 @@ public class HubClientService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var failures = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
-            var settings = await GetSettingsAsync();
-            if (string.IsNullOrEmpty(settings.HubUrl))
-            {
-                await WaitForChange(TimeSpan.FromMinutes(5), stoppingToken);
-                continue;
-            }
-
             try
             {
+                var settings = await GetSettingsAsync();
+                if (string.IsNullOrEmpty(settings.HubUrl))
+                {
+                    failures = 0;
+                    await WaitForChange(TimeSpan.FromMinutes(5), stoppingToken);
+                    continue;
+                }
+
                 await ConnectAsync(settings, stoppingToken);
+                failures = 0;
                 // stay connected; send summary every 5 minutes until settings change or connection closes
                 while (!stoppingToken.IsCancellationRequested && _connection?.State != HubConnectionState.Disconnected)
                 {
-                    if (await WaitForChange(TimeSpan.FromMinutes(5), stoppingToken)) break; // settings changed
+                    if (await WaitForChange(TimeSpan.FromMinutes(5), stoppingToken)) break; // settings changed or connection closed
                     if (IsConnected) await SendSummaryAsync();
                 }
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
+                // Includes timeouts (TaskCanceledException) during negotiate/handshake and hub restarts mid-registration:
+                // the agent must keep trying, never give up until the service stops.
+                failures++;
                 LastError = ex.Message;
-                _logger.LogWarning("Management hub connection failed: {Error}", ex.Message);
-                await WaitForChange(TimeSpan.FromSeconds(60), stoppingToken);
+                var delay = TimeSpan.FromSeconds(Math.Max(15, ForeverRetryPolicy.Delay(failures + 4).TotalSeconds)); // ~15 s ... 2 min
+                _logger.LogWarning("Management hub connection failed: {Error}. Retrying in {Delay:0}s", ex.Message, delay.TotalSeconds);
+                await WaitForChange(delay, stoppingToken);
             }
             finally
             {
@@ -116,12 +128,26 @@ public class HubClientService : BackgroundService
         _connection = new HubConnectionBuilder()
             .WithUrl(settings.HubUrl + HubPath, o => o.Headers["X-Instance-Id"] = _identity.InstanceId)
             .AddJsonProtocol(o => JsonDefaults.Apply(o.PayloadSerializerOptions))
-            .WithAutomaticReconnect()
+            .WithAutomaticReconnect(new ForeverRetryPolicy())
             .Build();
 
         _connection.On<InstanceCommand, InstanceCommandResult>("PerformCommand", cmd =>
             _registered ? handler.HandleAsync(cmd) : Task.FromResult(new InstanceCommandResult { CommandId = cmd.CommandId, Message = "Not registered" }));
-        _connection.Reconnected += async _ => { await RegisterAsync(); };
+        var connection = _connection;
+        _connection.Reconnecting += _ => { _registered = false; return Task.CompletedTask; };
+        _connection.Reconnected += async _ =>
+        {
+            try { await RegisterAsync(); }
+            catch (Exception ex)
+            {
+                // Connected but not registered is useless (the hub shows the instance offline): drop the connection so the
+                // main loop rebuilds it with back-off.
+                LastError = ex.Message;
+                _logger.LogWarning("Re-registration with the management hub failed: {Error}", ex.Message);
+                try { await connection.StopAsync(); } catch { /* Closed handler signals the loop */ }
+                Signal();
+            }
+        };
         _connection.Closed += ex => { _registered = false; LastError = ex?.Message; Signal(); return Task.CompletedTask; };
 
         await _connection.StartAsync(ct);

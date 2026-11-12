@@ -39,6 +39,8 @@ public class InstanceRegistry
     private readonly ConcurrentDictionary<string, string> _connectionToInstance = new();
     private readonly ConcurrentDictionary<string, string> _instanceToConnection = new();
     private readonly ConcurrentDictionary<string, RequestProgressState> _progress = new();
+    // Serializes read-modify-write of instance documents (a summary report must not overwrite an admin's rename).
+    private readonly SemaphoreSlim _instanceWrite = new(1, 1);
 
     public InstanceRegistry(DocumentStore store, ILogger<InstanceRegistry> logger)
     {
@@ -78,6 +80,13 @@ public class InstanceRegistry
     public async Task<InstanceRegistrationResult> RegisterAsync(string connectionId, InstanceRegistration reg)
     {
         if (string.IsNullOrWhiteSpace(reg.InstanceId)) return new() { Message = "Instance id is required" };
+        await _instanceWrite.WaitAsync();
+        try { return await RegisterLockedAsync(connectionId, reg); }
+        finally { _instanceWrite.Release(); }
+    }
+
+    private async Task<InstanceRegistrationResult> RegisterLockedAsync(string connectionId, InstanceRegistration reg)
+    {
         var existing = await _store.GetAsync<StoredInstance>(Instances, reg.InstanceId);
         string? issuedSecret = null;
 
@@ -92,6 +101,13 @@ public class InstanceRegistry
             var key = keys.FirstOrDefault(k => SecretHash.VerifyToken(reg.JoiningKey, k.KeyHash));
             if (key == null || key.IsRevoked || (key.DateExpiry != null && key.DateExpiry < DateTimeOffset.UtcNow))
                 return new() { Message = "Joining key is invalid, expired or revoked." };
+            // A joining key must not take over an instance that already has credentials: whoever presents its (visible)
+            // id would receive its commands, including credential updates, and lock the real agent out.
+            if (!string.IsNullOrEmpty(existing?.SecretHash))
+            {
+                _logger.LogWarning("Rejected joining-key registration for already joined instance {Id} ({Title})", reg.InstanceId, reg.Title);
+                return new() { Message = "This instance is already joined to the hub. An administrator must remove it under Instances before it can join again with a joining key." };
+            }
             issuedSecret = SecretHash.NewToken("cmis_");
             existing ??= new StoredInstance { InstanceId = reg.InstanceId, DateRegistered = DateTimeOffset.UtcNow };
             existing.SecretHash = SecretHash.HashToken(issuedSecret);
@@ -121,10 +137,15 @@ public class InstanceRegistry
 
     public async Task ReportSummaryAsync(string instanceId, ManagedInstanceSummary summary)
     {
-        var i = await _store.GetAsync<StoredInstance>(Instances, instanceId);
-        if (i == null) return;
-        i.Summary = summary; i.DateLastReported = DateTimeOffset.UtcNow;
-        await _store.UpsertAsync(Instances, instanceId, i);
+        await _instanceWrite.WaitAsync();
+        try
+        {
+            var i = await _store.GetAsync<StoredInstance>(Instances, instanceId);
+            if (i == null) return;
+            i.Summary = summary; i.DateLastReported = DateTimeOffset.UtcNow;
+            await _store.UpsertAsync(Instances, instanceId, i);
+        }
+        finally { _instanceWrite.Release(); }
     }
 
     public void ReportProgress(string instanceId, RequestProgressState state)
@@ -145,11 +166,16 @@ public class InstanceRegistry
 
     public async Task<bool> UpdateTitleAsync(string instanceId, string title)
     {
-        var i = await _store.GetAsync<StoredInstance>(Instances, instanceId);
-        if (i == null) return false;
-        i.Title = title.Trim();
-        await _store.UpsertAsync(Instances, instanceId, i);
-        return true;
+        await _instanceWrite.WaitAsync();
+        try
+        {
+            var i = await _store.GetAsync<StoredInstance>(Instances, instanceId);
+            if (i == null) return false;
+            i.Title = title.Trim();
+            await _store.UpsertAsync(Instances, instanceId, i);
+            return true;
+        }
+        finally { _instanceWrite.Release(); }
     }
 
     public Task<bool> RemoveInstanceAsync(string instanceId) => _store.DeleteAsync(Instances, instanceId);
@@ -173,7 +199,12 @@ public class InstanceHub : Microsoft.AspNetCore.SignalR.Hub
 
         var result = await _registry.RegisterAsync(Context.ConnectionId, reg);
         if (!result.IsAccepted)
-            FailedJoins[ip] = entry.window > now.AddMinutes(-1) ? (entry.count + 1, entry.window) : (1, now);
+        {
+            FailedJoins.AddOrUpdate(ip, _ => (1, now), (_, e) => e.window > now.AddMinutes(-1) ? (e.count + 1, e.window) : (1, now));
+            // Keep the table bounded: drop windows that have expired.
+            if (FailedJoins.Count > 1000)
+                foreach (var kv in FailedJoins.Where(kv => kv.Value.window < now.AddMinutes(-1)).ToList()) FailedJoins.TryRemove(kv);
+        }
         return result;
     }
 
@@ -220,6 +251,11 @@ public class InstanceGateway
             return await _hub.Clients.Client(conn).InvokeAsync<InstanceCommandResult>("PerformCommand", cmd, cts.Token);
         }
         catch (OperationCanceledException) { throw new InstanceUnavailableException("Instance did not respond in time."); }
+        catch (Exception ex) when (ex is IOException or HubException)
+        {
+            // The agent disconnected mid-command (or the connection id went stale): a 503, not a server error.
+            throw new InstanceUnavailableException("Instance disconnected before it answered: " + ex.Message);
+        }
     }
 
     public async Task<T?> SendAsync<T>(string instanceId, string commandType, object? payload, TimeSpan? timeout = null)

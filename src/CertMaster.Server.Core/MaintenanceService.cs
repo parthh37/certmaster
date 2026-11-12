@@ -20,28 +20,24 @@ public class MaintenanceService : BackgroundService
         try { await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); } catch (OperationCanceledException) { return; }
         while (!stoppingToken.IsCancellationRequested)
         {
+            var retry = TimeSpan.FromHours(24);
             try
             {
                 var file = await _store.BackupAsync(_paths.Combine("backups"));
                 _logger.LogInformation("Database backup written to {File}", file);
-                TrimItemLogs();
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "Maintenance run failed"); }
-            try { await Task.Delay(TimeSpan.FromHours(24), stoppingToken); } catch (OperationCanceledException) { break; }
-        }
-    }
-
-    private void TrimItemLogs()
-    {
-        foreach (var f in new DirectoryInfo(_paths.Logs).GetFiles("item_*.log").Where(f => f.Length > MaxItemLogBytes))
-        {
+            catch (Exception ex)
+            {
+                // e.g. disk full; try again sooner than tomorrow so a transient problem doesn't cost a day of backups.
+                _logger.LogWarning(ex, "Database backup failed; retrying in 1 hour");
+                retry = TimeSpan.FromHours(1);
+            }
             try
             {
-                var lines = File.ReadAllLines(f.FullName);
-                File.WriteAllLines(f.FullName, lines.Skip(lines.Length / 2));
-                _logger.LogInformation("Trimmed request log {File}", f.Name);
+                foreach (var name in ItemLog.TrimLargeLogs(_paths, MaxItemLogBytes)) _logger.LogInformation("Trimmed request log {File}", name);
             }
-            catch (Exception ex) { _logger.LogDebug(ex, "Could not trim {File}", f.Name); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Request log trimming failed"); }
+            try { await Task.Delay(retry, stoppingToken); } catch (OperationCanceledException) { break; }
         }
     }
 }

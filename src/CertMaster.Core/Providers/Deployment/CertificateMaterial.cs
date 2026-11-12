@@ -61,31 +61,56 @@ public sealed class CertificateMaterial : IDisposable
     /// <summary>Loads from the stored certificate files (PEM files preferred, PFX as fallback).</summary>
     public static CertificateMaterial Load(CertificateFiles files, bool lookupRootInStore = true)
     {
-        if (File.Exists(files.CertPem) && File.Exists(files.KeyPem))
+        // Every certificate object loaded here that does not end up in the result is disposed (PFX entries duplicating the PEM
+        // chain, the PFX copy of the leaf, duplicates dropped by Create).
+        var loaded = new List<X509Certificate2>();
+        try
         {
-            var certPem = File.ReadAllText(files.CertPem);
-            var keyPem = File.ReadAllText(files.KeyPem);
-            var leaf = X509Certificate2.CreateFromPem(certPem, keyPem);
-            var others = new X509Certificate2Collection();
-            if (File.Exists(files.ChainPem)) others.ImportFromPem(File.ReadAllText(files.ChainPem));
-            // the PFX may also carry a root that the PEM chain lacks
-            if (File.Exists(files.Pfx))
+            CertificateMaterial material;
+            if (File.Exists(files.CertPem) && File.Exists(files.KeyPem))
             {
-                try
+                var certPem = File.ReadAllText(files.CertPem);
+                var keyPem = File.ReadAllText(files.KeyPem);
+                var leaf = X509Certificate2.CreateFromPem(certPem, keyPem);
+                loaded.Add(leaf);
+                var others = new X509Certificate2Collection();
+                if (File.Exists(files.ChainPem)) others.ImportFromPem(File.ReadAllText(files.ChainPem));
+                loaded.AddRange(others);
+                // the PFX may also carry a root that the PEM chain lacks
+                if (File.Exists(files.Pfx))
                 {
-                    foreach (var c in X509CertificateLoader.LoadPkcs12CollectionFromFile(files.Pfx, files.PfxPassword, X509KeyStorageFlags.EphemeralKeySet))
-                        if (!c.HasPrivateKey && others.Cast<X509Certificate2>().All(o => o.Thumbprint != c.Thumbprint)) others.Add(c);
+                    try
+                    {
+                        foreach (var c in X509CertificateLoader.LoadPkcs12CollectionFromFile(files.Pfx, files.PfxPassword, X509KeyStorageFlags.EphemeralKeySet))
+                        {
+                            loaded.Add(c);
+                            if (!c.HasPrivateKey && others.Cast<X509Certificate2>().All(o => o.Thumbprint != c.Thumbprint)) others.Add(c);
+                        }
+                    }
+                    catch (CryptographicException) { /* PEM files are enough */ }
                 }
-                catch (CryptographicException) { /* PEM files are enough */ }
+                material = Create(leaf, others.Cast<X509Certificate2>(), keyPem.Trim() + "\n", lookupRootInStore);
             }
-            return Create(leaf, others.Cast<X509Certificate2>(), keyPem.Trim() + "\n", lookupRootInStore);
+            else
+            {
+                if (!File.Exists(files.Pfx)) throw new FileNotFoundException("Certificate files not found", files.Pfx);
+                var flags = X509KeyStorageFlags.Exportable | (OperatingSystem.IsWindows() ? X509KeyStorageFlags.EphemeralKeySet : 0);
+                var all = X509CertificateLoader.LoadPkcs12CollectionFromFile(files.Pfx, files.PfxPassword, flags).Cast<X509Certificate2>().ToList();
+                loaded.AddRange(all);
+                var leafCert = all.FirstOrDefault(c => c.HasPrivateKey) ?? throw new CryptographicException("The PFX does not contain a private key.");
+                material = Create(leafCert, all.Where(c => !ReferenceEquals(c, leafCert)), null, lookupRootInStore);
+            }
+            foreach (var c in loaded.Where(c => !material.Holds(c))) c.Dispose();
+            return material;
         }
-        if (!File.Exists(files.Pfx)) throw new FileNotFoundException("Certificate files not found", files.Pfx);
-        var flags = X509KeyStorageFlags.Exportable | (OperatingSystem.IsWindows() ? X509KeyStorageFlags.EphemeralKeySet : 0);
-        var all = X509CertificateLoader.LoadPkcs12CollectionFromFile(files.Pfx, files.PfxPassword, flags).Cast<X509Certificate2>().ToList();
-        var leafCert = all.FirstOrDefault(c => c.HasPrivateKey) ?? throw new CryptographicException("The PFX does not contain a private key.");
-        return Create(leafCert, all.Where(c => !ReferenceEquals(c, leafCert)), null, lookupRootInStore);
+        catch
+        {
+            foreach (var c in loaded) c.Dispose();
+            throw;
+        }
     }
+
+    private bool Holds(X509Certificate2 c) => ReferenceEquals(c, Leaf) || ReferenceEquals(c, Root) || Intermediates.Any(i => ReferenceEquals(i, c));
 
     /// <summary>Builds from a leaf (with private key) and any other certificates of its chain, in any order.</summary>
     public static CertificateMaterial Create(X509Certificate2 leafWithKey, IEnumerable<X509Certificate2> chainCertificates, string? privateKeyPem = null, bool lookupRootInStore = true)
@@ -139,7 +164,7 @@ public sealed class CertificateMaterial : IDisposable
     {
         try
         {
-            AsymmetricAlgorithm? key = (AsymmetricAlgorithm?)cert.GetRSAPrivateKey() ?? cert.GetECDsaPrivateKey();
+            using AsymmetricAlgorithm? key = (AsymmetricAlgorithm?)cert.GetRSAPrivateKey() ?? cert.GetECDsaPrivateKey();
             return key == null ? null : key.ExportPkcs8PrivateKeyPem() + "\n";
         }
         catch (CryptographicException) { return null; }

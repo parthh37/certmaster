@@ -100,6 +100,8 @@ public sealed class RecordingHandler : HttpMessageHandler
 public static class Ctx
 {
     private static readonly string LogRoot = Path.Combine(Path.GetTempPath(), "certmaster-tests", "data");
+    /// <summary>Private script temp folder for tests (the default is under %ProgramData%CertMaster, which tests may not be able to write).</summary>
+    public static readonly string ScriptTemp = Path.Combine(Path.GetTempPath(), "certmaster-tests", "script-temp");
 
     public static ManagedCertificate Item(params string[] domains)
     {
@@ -115,7 +117,7 @@ public static class Ctx
     public static DeploymentContext Create(IDeploymentTaskProvider provider, CertificateFiles files, Dictionary<string, string>? parameters = null,
         bool preview = false, Dictionary<string, string>? credentials = null, ManagedCertificate? item = null, HttpMessageHandler? http = null,
         DeploymentContextType target = DeploymentContextType.LocalAsService, string? targetHost = null,
-        Func<string?, Task<Dictionary<string, string>>>? unlock = null)
+        Func<string?, Task<Dictionary<string, string>>>? unlock = null, string? requestMessage = null, bool? requestSucceeded = null)
     {
         item ??= Item();
         var task = new DeploymentTaskConfig { TaskTypeId = provider.Definition.Id, TaskName = provider.Definition.DefaultTitle, TargetType = target, TargetHost = targetHost };
@@ -129,6 +131,8 @@ public static class Ctx
             Log = new ItemLog(new DataPaths(LogRoot), item.Id, NullLogger.Instance),
             Http = new HttpClient(http ?? new RecordingHandler()),
             IsPreviewOnly = preview,
+            ScriptTempFolder = ScriptTemp,
+            RequestMessage = requestMessage, RequestSucceeded = requestSucceeded,
             UnlockCredentialAsync = unlock ?? (_ => Task.FromResult(new Dictionary<string, string>())),
         };
     }

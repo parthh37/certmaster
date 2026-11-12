@@ -25,18 +25,72 @@ public class ItemLog
     private void Write(string level, string message)
     {
         var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz} [{level}] {message}";
-        lock (FileLock) File.AppendAllText(_path, line + Environment.NewLine);
         var lvl = level switch { "ERR" => LogLevel.Error, "WRN" => LogLevel.Warning, _ => LogLevel.Information };
         _logger.Log(lvl, "[{ItemId}] {Message}", _itemId, message);
+        // The per-item log is a convenience copy: a locked file (antivirus, an open viewer) or a full disk must never fail
+        // a certificate request. The service log above still has the line.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                lock (FileLock)
+                {
+                    using var fs = new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(line + Environment.NewLine);
+                    fs.Write(bytes);
+                }
+                return;
+            }
+            catch (IOException) when (attempt < 2) { Thread.Sleep(50); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogDebug(ex, "Could not write request log {Path}", _path);
+                return;
+            }
+        }
     }
 
     public static List<LogEntry> Read(DataPaths paths, string itemId, int maxLines = 1000)
     {
         var path = Path.Combine(paths.Logs, $"item_{itemId}.log");
         if (!File.Exists(path)) return new();
-        string[] lines;
-        lock (FileLock) lines = File.ReadAllLines(path);
-        return lines.TakeLast(maxLines).Select(Parse).ToList();
+        try
+        {
+            var lines = new List<string>();
+            lock (FileLock)
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(fs);
+                while (reader.ReadLine() is { } l) lines.Add(l);
+            }
+            return lines.TakeLast(maxLines).Select(Parse).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new() { new LogEntry { Level = "WRN", Message = "The request log could not be read: " + ex.Message } };
+        }
+    }
+
+    /// <summary>Halves request logs larger than <paramref name="maxBytes"/> (oldest lines go). Returns the files trimmed.</summary>
+    public static List<string> TrimLargeLogs(DataPaths paths, long maxBytes)
+    {
+        var trimmed = new List<string>();
+        foreach (var f in new DirectoryInfo(paths.Logs).GetFiles("item_*.log").Where(f => f.Length > maxBytes))
+        {
+            try
+            {
+                lock (FileLock)
+                {
+                    var lines = File.ReadAllLines(f.FullName);
+                    var tmp = f.FullName + ".tmp";
+                    File.WriteAllLines(tmp, lines.Skip(lines.Length / 2));
+                    File.Move(tmp, f.FullName, overwrite: true);
+                }
+                trimmed.Add(f.Name);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* try again tomorrow */ }
+        }
+        return trimmed;
     }
 
     private static LogEntry Parse(string line)

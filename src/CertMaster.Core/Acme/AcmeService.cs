@@ -90,9 +90,10 @@ public class AcmeService
             };
 
             // one account per CA + environment: replace an existing one
+            // Save the new account before removing the old one: a failed write must never lose both.
             var existing = await GetAccountForRequestAsync(ca.Id, req.IsStaging);
-            if (existing != null) await _store.DeleteAsync(AccountsCollection, existing.StorageKey);
             await _store.UpsertAsync(AccountsCollection, details.StorageKey, details);
+            if (existing != null && existing.StorageKey != details.StorageKey) await _store.DeleteAsync(AccountsCollection, existing.StorageKey);
             _logger.LogInformation("Registered ACME account {Uri} with {Ca}", details.AccountURI, ca.Title);
 
             var result = JsonDefaults.Clone(details);
@@ -122,6 +123,9 @@ public class AcmeService
         return (ctx, account, ca);
     }
 
+    /// <summary>badNonce is a normal, retryable ACME condition (busy CAs rotate nonces); the library default is a single retry.</summary>
+    private const int BadNonceRetries = 5;
+
     private static readonly HttpClient UntrustedTlsHttp = new(new HttpClientHandler
     {
         // Opt-in per custom CA only (test CAs like Pebble, internal CAs with private roots). Built-in CAs always validate TLS.
@@ -133,8 +137,8 @@ public class AcmeService
         if (ca.AllowUntrustedTls && ca.IsCustom)
         {
             _logger.LogWarning("TLS certificate validation is disabled for custom CA {Ca}", ca.Title);
-            return new AcmeContext(directory, key, new Certes.Acme.AcmeHttpClient(directory, UntrustedTlsHttp));
+            return new AcmeContext(directory, key, new Certes.Acme.AcmeHttpClient(directory, UntrustedTlsHttp), BadNonceRetries);
         }
-        return new AcmeContext(directory, key);
+        return new AcmeContext(directory, key, null, BadNonceRetries);
     }
 }
