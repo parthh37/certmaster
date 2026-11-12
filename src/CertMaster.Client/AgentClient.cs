@@ -72,7 +72,8 @@ public class AgentClient : IAsyncDisposable
     private async Task<T> Delete<T>(string path)
     {
         using var resp = await _http.DeleteAsync(path);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+            throw new HttpRequestException($"{(int)resp.StatusCode} {resp.ReasonPhrase}: {await resp.Content.ReadAsStringAsync()}", null, resp.StatusCode);
         return (await resp.Content.ReadFromJsonAsync<T>(JsonDefaults.Options))!;
     }
 

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CertMaster.Core.Storage;
+using CertMaster.Core.Util;
 using CertMaster.Models;
 
 namespace CertMaster.Server.Core;
@@ -14,26 +15,60 @@ public class AgentIdentity
     public string ApiKey { get; }
     public string Version { get; } = typeof(AgentIdentity).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
-    private record IdentityFile(string InstanceId, string Title);
+    public record IdentityFile(string InstanceId, string Title);
 
     public AgentIdentity(DataPaths paths)
     {
-        var idFile = paths.Combine("instance.json");
-        var id = File.Exists(idFile) ? JsonDefaults.Deserialize<IdentityFile>(File.ReadAllText(idFile)) : null;
-        if (id == null)
-        {
-            id = new IdentityFile(Guid.NewGuid().ToString(), Environment.MachineName);
-            File.WriteAllText(idFile, JsonDefaults.Serialize(id));
-        }
+        var id = LoadOrCreateIdentity(paths.Combine("instance.json"));
         InstanceId = id.InstanceId;
         Title = id.Title;
-
-        var keyFile = ApiKeyPath(paths);
-        if (!File.Exists(keyFile)) File.WriteAllText(keyFile, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
-        ApiKey = File.ReadAllText(keyFile).Trim();
+        ApiKey = LoadOrCreateApiKey(ApiKeyPath(paths));
     }
 
     public static string ApiKeyPath(DataPaths paths) => paths.Combine("agent-api.key");
+
+    /// <summary>
+    /// The instance id is how the hub knows this agent, so it is never replaced just because the file could not be read:
+    /// a damaged file is recovered from its backup, and if neither copy is usable startup fails instead of silently
+    /// registering as a new instance.
+    /// </summary>
+    public static IdentityFile LoadOrCreateIdentity(string file)
+    {
+        static IdentityFile? Parse(string json) =>
+            JsonDefaults.Deserialize<IdentityFile>(json) is { InstanceId.Length: > 0 } f ? f : null;
+
+        var id = AtomicFile.Read(file, Parse, out var fromBackup);
+        if (id != null)
+        {
+            if (fromBackup) AtomicFile.WriteAllText(file, JsonDefaults.Serialize(id));
+            return id;
+        }
+        if (AtomicFile.Exists(file))
+            throw new InvalidOperationException(
+                $"The instance identity file {file} could not be read and has no usable backup. Restore it from a backup to keep this " +
+                "agent's identity, or delete it (and any .bak) to start as a new instance (it will need to join the management hub again).");
+
+        id = new IdentityFile(Guid.NewGuid().ToString(), Environment.MachineName);
+        AtomicFile.WriteAllText(file, JsonDefaults.Serialize(id));
+        return id;
+    }
+
+    /// <summary>The local API key; recovered from its backup when damaged, generated only when there is none at all.</summary>
+    public static string LoadOrCreateApiKey(string file)
+    {
+        static string? Parse(string text) => text.Trim() is { Length: >= 32 } k && k.All(char.IsAsciiHexDigit) ? k : null;
+
+        var key = AtomicFile.Read(file, Parse, out var fromBackup);
+        if (key != null)
+        {
+            if (fromBackup) AtomicFile.WriteAllText(file, key);
+            return key;
+        }
+        // Local clients read the key file on start, so a new key only means restarting the desktop app.
+        key = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        AtomicFile.WriteAllText(file, key);
+        return key;
+    }
 
     public bool IsValidKey(string? candidate) =>
         candidate != null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(candidate), Encoding.UTF8.GetBytes(ApiKey));
