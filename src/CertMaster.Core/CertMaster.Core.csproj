@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\CertMaster.Models\CertMaster.Models.csproj" />
@@ -11,6 +11,7 @@
     <PackageReference Include="Azure.ResourceManager.Dns" Version="1.1.1" />
     <PackageReference Include="Azure.Security.KeyVault.Certificates" Version="4.10.0" />
     <PackageReference Include="Certes" Version="4.1.0" />
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.15" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
@@ -26,5 +27,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bundled PowerShell scripts (deployment helpers, DNS plugins) are copied next to the agent. -->
+    <None Update="Scripts\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
 </Project>
