@@ -28,14 +28,35 @@ public class AgentClient : IAsyncDisposable
         _http.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
     }
 
+    /// <summary>The local agent's data folder (CERTMASTER_DATA, else %ProgramData%\CertMaster).</summary>
+    public static string LocalDataPath(string? dataPath = null) =>
+        dataPath ?? Environment.GetEnvironmentVariable("CERTMASTER_DATA")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CertMaster");
+
+    /// <summary>The API key file the local agent writes when it starts.</summary>
+    public static string LocalKeyFile(string? dataPath = null) => Path.Combine(LocalDataPath(dataPath), "agent-api.key");
+
+    /// <summary>The local agent's URL (CERTMASTER_AGENT_URL, else <see cref="DefaultUrl"/>).</summary>
+    public static string LocalUrl(string? url = null) => url ?? Environment.GetEnvironmentVariable("CERTMASTER_AGENT_URL") ?? DefaultUrl;
+
     /// <summary>Creates a client using the API key file written by the local agent (requires administrator rights).</summary>
     public static AgentClient CreateLocal(string? url = null, string? dataPath = null)
     {
-        var root = dataPath ?? Environment.GetEnvironmentVariable("CERTMASTER_DATA")
-                   ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CertMaster");
-        var keyFile = Path.Combine(root, "agent-api.key");
+        var keyFile = LocalKeyFile(dataPath);
         if (!File.Exists(keyFile)) throw new FileNotFoundException("Agent API key not found. Is the CertMaster Agent service installed and running?", keyFile);
-        return new AgentClient(url ?? Environment.GetEnvironmentVariable("CERTMASTER_AGENT_URL") ?? DefaultUrl, File.ReadAllText(keyFile).Trim());
+        return new AgentClient(LocalUrl(url), File.ReadAllText(keyFile).Trim());
+    }
+
+    /// <summary>True when the agent at <paramref name="url"/> answers its unauthenticated health check.</summary>
+    public static async Task<bool> IsAgentRespondingAsync(string? url = null, CancellationToken ct = default)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var resp = await http.GetAsync(LocalUrl(url).TrimEnd('/') + "/api/system/health", ct);
+            return resp.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { return false; }
     }
 
     // ---------- status stream ----------
