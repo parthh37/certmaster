@@ -76,6 +76,8 @@ public class Preferences
     public string DefaultCertificateAuthority { get; set; } = "letsencrypt.org";
     public string? DefaultKeyType { get; set; } = "RS256";
     public bool EnableStatusReporting { get; set; } = true;
+    /// <summary>After the DNS propagation delay, wait up to this long for TXT records to appear on the authoritative name servers (0 = skip the check).</summary>
+    public int DnsPropagationCheckSeconds { get; set; } = 300;
     public string? NotificationWebhookUrl { get; set; }
     public string CertificateStorePath { get; set; } = "";
 }

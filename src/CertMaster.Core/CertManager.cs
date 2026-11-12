@@ -383,6 +383,7 @@ public partial class CertManager
         try
         {
             var maxPropagation = 0;
+            var dnsRecords = new List<(string record, string value)>();
             foreach (var authz in await order.Authorizations())
             {
                 ct.ThrowIfCancellationRequested();
@@ -410,6 +411,7 @@ public partial class CertManager
                     var delay = cfg.PropagationDelaySeconds
                                 ?? (int.TryParse(dctx.Param("propagationdelay"), out var pd) ? pd : provider.Definition.PropagationDelaySeconds);
                     maxPropagation = Math.Max(maxPropagation, delay);
+                    dnsRecords.Add((record, txt));
                 }
                 else if (cfg.ChallengeType == ChallengeTypes.Http01)
                 {
@@ -449,6 +451,17 @@ public partial class CertManager
             {
                 await Report(item, RequestState.Running, $"Waiting {maxPropagation}s for DNS propagation", log);
                 await Task.Delay(TimeSpan.FromSeconds(maxPropagation), ct);
+            }
+
+            if (dnsRecords.Count > 0 && prefs.DnsPropagationCheckSeconds > 0)
+            {
+                await Report(item, RequestState.Running, $"Checking {dnsRecords.Count} TXT record(s) on authoritative name servers", log);
+                foreach (var (record, value) in dnsRecords.Distinct())
+                {
+                    var check = await DnsPropagationChecker.WaitForTxtAsync(record, value, TimeSpan.FromSeconds(prefs.DnsPropagationCheckSeconds), log, ct);
+                    if (check.IsVisible) log.Info($"{record}: visible on authoritative name servers after {check.Elapsed.TotalSeconds:0}s");
+                    else log.Warn($"{record}: not confirmed on all authoritative name servers ({check.Message}). Continuing; the CA may still see it.");
+                }
             }
 
             foreach (var (challenge, _, identifier) in pending)

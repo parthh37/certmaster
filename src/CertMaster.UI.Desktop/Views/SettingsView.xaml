@@ -16,6 +16,8 @@
                         <mah:NumericUpDown Value="{Binding RenewalCheckIntervalMinutes}" Minimum="5" Maximum="1440" Width="140" HorizontalAlignment="Left" />
                         <TextBlock Text="Maximum renewals per run (0 = unlimited)" Style="{StaticResource FieldLabel}" />
                         <mah:NumericUpDown Value="{Binding MaxRenewalRequests}" Minimum="0" Maximum="1000" Width="140" HorizontalAlignment="Left" />
+                        <TextBlock Text="DNS propagation check: wait up to (seconds) for TXT records on authoritative name servers (0 = off)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
+                        <mah:NumericUpDown Value="{Binding DnsPropagationCheckSeconds}" Minimum="0" Maximum="3600" Width="140" HorizontalAlignment="Left" />
                         <TextBlock Text="HTTP Challenge Server" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
                         <mah:ToggleSwitch Content="Enable built-in HTTP challenge server (http-01)" IsOn="{Binding EnableHttpChallengeServer}" />
                         <TextBlock Text="Listener prefix (http.sys URL; shares port 80 with IIS)" Style="{StaticResource FieldLabel}" />
