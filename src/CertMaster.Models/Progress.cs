@@ -20,10 +20,13 @@ public class ActionResult
     public ActionResult() { }
     public ActionResult(bool ok, string? message) { IsSuccess = ok; Message = message; }
     public bool IsSuccess { get; set; }
+    /// <summary>Completed, but with something the user should look at (e.g. a step was skipped). Implies IsSuccess.</summary>
+    public bool IsWarning { get; set; }
     public string? Message { get; set; }
     public List<ActionStep> Actions { get; set; } = new();
 
     public static ActionResult Ok(string? message = null) => new(true, message);
+    public static ActionResult Warn(string message) => new(true, message) { IsWarning = true };
     public static ActionResult Fail(string message) => new(false, message);
 }
 

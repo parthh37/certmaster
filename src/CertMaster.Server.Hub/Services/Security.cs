@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using CertMaster.Core.Storage;
+using CertMaster.Core.Util;
 using CertMaster.Models;
 using CertMaster.Models.Hub;
 using Microsoft.IdentityModel.Tokens;
@@ -46,17 +47,26 @@ public class HubSettingsFile
     public int AuthTokenExpirationMinutes { get; set; } = 60;
     public int RefreshTokenExpirationMinutes { get; set; } = 1440;
 
-    /// <summary>JWT secret is generated per install (never shipped in appsettings) and stored in hubservice.json.</summary>
-    public static HubSettingsFile LoadOrCreate(DataPaths paths)
+    /// <summary>
+    /// JWT secret is generated per install (never shipped in appsettings) and stored in hubservice.json. A damaged file is
+    /// recovered from its backup; if neither copy can be read, startup fails rather than overwriting the file with defaults.
+    /// </summary>
+    public static HubSettingsFile LoadOrCreate(DataPaths paths) => LoadOrCreate(paths.Combine("hubservice.json"));
+
+    public static HubSettingsFile LoadOrCreate(string file)
     {
-        var file = paths.Combine("hubservice.json");
-        var s = File.Exists(file) ? JsonDefaults.Deserialize<HubSettingsFile>(File.ReadAllText(file)) : null;
+        var s = AtomicFile.Read(file, JsonDefaults.Deserialize<HubSettingsFile>, out var fromBackup);
+        if (s == null && AtomicFile.Exists(file))
+            throw new InvalidOperationException(
+                $"The hub settings file {file} could not be read and has no usable backup. Fix or restore it, or delete it to " +
+                "create new settings (everyone will need to sign in again).");
         if (s == null || string.IsNullOrEmpty(s.JwtSecret))
         {
             s ??= new HubSettingsFile();
             s.JwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-            File.WriteAllText(file, JsonDefaults.Serialize(s));
+            AtomicFile.WriteAllText(file, JsonDefaults.Serialize(s));
         }
+        else if (fromBackup) AtomicFile.WriteAllText(file, JsonDefaults.Serialize(s));
         return s;
     }
 
