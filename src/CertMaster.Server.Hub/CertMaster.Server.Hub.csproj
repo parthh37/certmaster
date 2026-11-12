@@ -19,6 +19,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <ApplicationIcon>../../assets/certmaster.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

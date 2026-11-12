@@ -4,7 +4,7 @@
                  xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
                  xmlns:views="clr-namespace:CertMaster.UI.Desktop.Views"
                  Title="{Binding Version, StringFormat={}{0} - Certificate Manager}" Height="840" Width="1320" MinWidth="1020" MinHeight="620"
-                 WindowStartupLocation="CenterScreen" GlowBrush="{DynamicResource MahApps.Brushes.Accent}" TitleCharacterCasing="Normal">
+                 Icon="pack://application:,,,/certmaster.ico" WindowStartupLocation="CenterScreen" GlowBrush="{DynamicResource MahApps.Brushes.Accent}" TitleCharacterCasing="Normal">
 
     <DockPanel>
         <!-- Status bar -->
