@@ -1,0 +1,366 @@
+<UserControl x:Class="CertMaster.UI.Desktop.Views.CertificateEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+             xmlns:vm="clr-namespace:CertMaster.UI.Desktop.ViewModels">
+    <UserControl.Resources>
+        <!-- Shared template for pre-request and deployment task lists -->
+        <DataTemplate x:Key="TaskTemplate" DataType="{x:Type vm:DeploymentTaskViewModel}">
+            <Expander Margin="0,0,0,6" IsExpanded="False">
+                <Expander.Header>
+                    <TextBlock>
+                        <Run Text="{Binding TaskName, Mode=OneWay}" FontWeight="SemiBold" />
+                        <Run Text="  ·  " /><Run Text="{Binding TypeTitle, Mode=OneWay}" />
+                    </TextBlock>
+                </Expander.Header>
+                <StackPanel Margin="8">
+                    <TextBlock Text="{Binding Definition.Description}" Style="{StaticResource Hint}" />
+                    <UniformGrid Columns="2">
+                        <StackPanel Margin="0,0,10,0">
+                            <TextBlock Text="Task name" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding TaskName}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Trigger" Style="{StaticResource FieldLabel}" />
+                            <ComboBox ItemsSource="{Binding TriggerOptions}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding Trigger}" />
+                        </StackPanel>
+                    </UniformGrid>
+                    <StackPanel Visibility="{Binding HasTargetChoice, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Target" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding TargetOptions}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding TargetType}" />
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding IsSsh, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Remote host (host or host:port)" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding TargetHost}" mah:TextBoxHelper.Watermark="server.example.com:22" />
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding NeedsCredential, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Credentials" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}"
+                                  mah:TextBoxHelper.Watermark="Select stored credential (add in Settings)" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0" />
+                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                        <mah:ToggleSwitch Content="Stop remaining tasks if this fails" IsOn="{Binding IsFatalOnError}" Margin="0,0,16,0" />
+                        <mah:ToggleSwitch Content="Run even if a previous task failed" IsOn="{Binding RunIfLastStepFailed}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Retries" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <mah:NumericUpDown Value="{Binding RetriesAllowed}" Minimum="0" Maximum="10" Width="90" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding LastResult}" Style="{StaticResource Hint}" Margin="0,8,0,0" Visibility="{Binding LastResult, Converter={StaticResource NullCollapsed}}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                        <Button Content="Run now" Style="{StaticResource ToolButton}" Command="{Binding DataContext.RunTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                        <Button Content="Remove" Style="{StaticResource ToolButton}" Command="{Binding DataContext.Editor.RemoveTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Heading}" FontSize="24" FontWeight="Light" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,2,0,8" TextTrimming="CharacterEllipsis" />
+            <Separator Margin="0,0,0,8" />
+            <DockPanel Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.TestCommand, RelativeSource={RelativeSource AncestorType=Window}}" ToolTip="Check the configuration without requesting a certificate">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE73E;" Margin="0,2,6,0" /><TextBlock Text="Test" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource PrimaryToolButton}" Command="{Binding DataContext.RequestCommand, RelativeSource={RelativeSource AncestorType=Window}}" Margin="0">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE768;" Margin="0,2,6,0" /><TextBlock Text="Request Certificate" /></StackPanel>
+                    </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.SaveCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE74E;" Margin="0,2,6,0" /><TextBlock Text="Save" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.DiscardCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE7A7;" Margin="0,2,6,0" /><TextBlock Text="Discard Changes" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE74D;" Margin="0,2,6,0" /><TextBlock Text="Delete" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.ExportCommand, RelativeSource={RelativeSource AncestorType=Window}}" ToolTip="Export the current certificate">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xEDE1;" Margin="0,2,6,0" /><TextBlock Text="Export" /></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolButton}" Command="{Binding DataContext.RevokeCommand, RelativeSource={RelativeSource AncestorType=Window}}" ToolTip="Revoke the current certificate with the CA">
+                        <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8F8;" Margin="0,2,6,0" /><TextBlock Text="Revoke" /></StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Test results -->
+            <ItemsControl ItemsSource="{Binding DataContext.TestResults, RelativeSource={RelativeSource AncestorType=Window}}" Margin="0,0,0,6">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock TextWrapping="Wrap" Margin="0,1">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="SeaGreen" />
+                                    <Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Foreground" Value="Firebrick" /></DataTrigger></Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Run Text="{Binding Title, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=": " /><Run Text="{Binding Description, Mode=OneWay}" />
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Section navigation (right) -->
+        <Border DockPanel.Dock="Right" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource MahApps.Brushes.Gray8}" Width="118" Margin="10,0,0,0">
+            <StackPanel>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Certificate section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Certificate, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xEB95;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Certificate" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Authorization section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Authorization, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8D7;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Authorization" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Deployment section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Deployment, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE8B7;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Deployment" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Tasks section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Tasks, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE713;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Tasks" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Preview section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Preview, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE768;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Preview" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+                <RadioButton Style="{StaticResource NavButton}" GroupName="nav" AutomationProperties.Name="Log section" IsChecked="{Binding Section, Converter={StaticResource Eq}, ConverterParameter=Log, Mode=TwoWay}">
+                    <StackPanel><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE9F9;" FontSize="18" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Accent}" /><TextBlock Text="Log" HorizontalAlignment="Center" /></StackPanel>
+                </RadioButton>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+            <Grid>
+                <!-- ===== Certificate ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Certificate}">
+                    <TextBlock Text="Certificate" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="Choose the domains to include. Pick a website to load its hostnames, or add domains manually." Style="{StaticResource Hint}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Text="Name" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" mah:TextBoxHelper.Watermark="Defaults to the primary domain" Margin="0,4" />
+                        <TextBlock Grid.Row="1" Text="Select Website" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,4">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding ServerStatusText}" Style="{StaticResource Hint}" Margin="10,4,0,0" MaxWidth="260" />
+                            <ComboBox ItemsSource="{Binding Sites}" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValue="{Binding SelectedSiteId}"
+                                      IsEnabled="{Binding IsIisAvailable}" mah:TextBoxHelper.Watermark="(optional) select an IIS site"
+                                      SelectionChanged="OnSiteChanged" />
+                        </DockPanel>
+                        <TextBlock Grid.Row="2" Text="Add domains" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,4">
+                            <Button DockPanel.Dock="Right" Content="Add" Style="{StaticResource ToolButton}" Margin="6,0,0,0" Command="{Binding AddDomainsCommand}" />
+                            <TextBox Text="{Binding AddDomainsText, UpdateSourceTrigger=PropertyChanged}" mah:TextBoxHelper.Watermark="www.example.com, example.com, *.example.com" />
+                        </DockPanel>
+                    </Grid>
+
+                    <DataGrid ItemsSource="{Binding Domains}" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" Margin="0,10,0,10" MinHeight="90"
+                              GridLinesVisibility="Horizontal" BorderThickness="1" BorderBrush="{DynamicResource MahApps.Brushes.Gray8}">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Include" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="70" />
+                            <DataGridTextColumn Header="Domain" Binding="{Binding Domain}" Width="*" />
+                            <DataGridTemplateColumn Header="Primary" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <RadioButton IsChecked="{Binding IsPrimary, Mode=OneWay}" HorizontalAlignment="Center" GroupName="primary"
+                                                     Command="{Binding DataContext.Editor.SetPrimaryCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Note" Binding="{Binding Comment}" IsReadOnly="True" Width="180" />
+                            <DataGridTemplateColumn Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="&#xE711;" FontFamily="Segoe MDL2 Assets" Padding="4,2" ToolTip="Remove"
+                                                Command="{Binding DataContext.Editor.RemoveDomainCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="20" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Certificate Authority" Style="{StaticResource FieldLabel}" />
+                            <ComboBox ItemsSource="{Binding Authorities}" DisplayMemberPath="Title" SelectedValuePath="Id" SelectedValue="{Binding Item.CertificateAuthorityId}" />
+                            <mah:ToggleSwitch Content="Use staging (test) environment" IsOn="{Binding Item.UseStagingMode}" Margin="0,8,0,0" />
+                            <mah:ToggleSwitch Content="Include in automatic renewal" IsOn="{Binding Item.IncludeInAutoRenew}" />
+                            <TextBlock Text="IP addresses (optional, one per line)" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding IpText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="40" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Key type" Style="{StaticResource FieldLabel}" />
+                            <ComboBox ItemsSource="{Binding KeyTypes}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding Config.CSRKeyAlg}" />
+                            <mah:ToggleSwitch Content="Reuse private key on renewal" IsOn="{Binding Config.ReusePrivateKey}" Margin="0,8,0,0" />
+                            <TextBlock Text="Preferred chain (issuer common name, optional)" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Config.PreferredChain}" />
+                            <TextBlock Text="ACME profile (optional, e.g. tlsserver, shortlived)" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Config.AcmeProfile}" />
+                            <TextBlock Text="Renew N days before expiry (blank = default)" Style="{StaticResource FieldLabel}" />
+                            <mah:NumericUpDown Value="{Binding Item.CustomRenewalDaysBeforeExpiry}" Minimum="1" Maximum="365" HorizontalAlignment="Left" Width="140" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="Comments" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding Item.Comments}" AcceptsReturn="True" MinHeight="40" />
+                </StackPanel>
+
+                <!-- ===== Authorization ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Authorization}">
+                    <TextBlock Text="Authorization" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="How the CA verifies that you control each domain. http-01 suits public web servers on port 80; dns-01 is required for wildcards and works for internal hosts. Add more configurations with a domain match to use different methods for different domains." Style="{StaticResource Hint}" />
+                    <ItemsControl ItemsSource="{Binding Challenges}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ChallengeConfigViewModel}">
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <UniformGrid Columns="3">
+                                            <StackPanel Margin="0,0,8,0">
+                                                <TextBlock Text="Challenge type" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox ItemsSource="{Binding ChallengeTypeOptions}" SelectedItem="{Binding ChallengeType}" />
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,8,0">
+                                                <TextBlock Text="Provider" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox ItemsSource="{Binding Providers}" DisplayMemberPath="Title" SelectedValuePath="Id" SelectedValue="{Binding ProviderId}" IsTextSearchEnabled="True" />
+                                            </StackPanel>
+                                            <StackPanel Visibility="{Binding NeedsCredential, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="Credentials" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}" />
+                                            </StackPanel>
+                                        </UniformGrid>
+                                        <TextBlock Text="{Binding ProviderDescription}" Style="{StaticResource Hint}" Margin="0,6,0,0" />
+                                        <TextBlock Text="Apply to domains (optional, comma separated; blank = all)" Style="{StaticResource FieldLabel}" />
+                                        <TextBox Text="{Binding DomainMatch}" />
+                                        <StackPanel Visibility="{Binding IsDns, Converter={StaticResource BoolToVis}}">
+                                            <UniformGrid Columns="3">
+                                                <StackPanel Margin="0,0,8,0">
+                                                    <TextBlock Text="CNAME delegation rule" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Text="{Binding DelegationRule}" mah:TextBoxHelper.Watermark="*.example.com:*.auth.example.net" />
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,8,0">
+                                                    <TextBlock Text="Propagation delay (seconds)" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Text="{Binding PropagationDelay}" mah:TextBoxHelper.Watermark="provider default" />
+                                                </StackPanel>
+                                                <StackPanel>
+                                                    <TextBlock Text="DNS zone id (optional)" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Text="{Binding ZoneId}" />
+                                                </StackPanel>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,8,0,0" />
+                                        <Button Content="Remove" HorizontalAlignment="Right" Style="{StaticResource ToolButton}" Margin="0"
+                                                Command="{Binding DataContext.Editor.RemoveChallengeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="+ Add authorization configuration" HorizontalAlignment="Left" Style="{StaticResource ToolButton}" Command="{Binding AddChallengeCommand}" />
+                </StackPanel>
+
+                <!-- ===== Deployment ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Deployment}">
+                    <TextBlock Text="Certificate Deployment" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="Certificates can be applied to IIS bindings automatically, or you can deploy them yourself with tasks (see Tasks)." Style="{StaticResource Hint}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Text="Deployment Mode:" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding DeploymentModes}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding Config.DeploymentSiteOption}" HorizontalAlignment="Left" MinWidth="300" Margin="0,4" />
+                        <TextBlock Grid.Row="1" Text="Binding Add/Update:" VerticalAlignment="Center" />
+                        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding BindingOptions}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding Config.DeploymentBindingOption}" HorizontalAlignment="Left" MinWidth="300" Margin="0,4" />
+                        <TextBlock Grid.Row="2" Text="Matching any of:" VerticalAlignment="Top" Margin="0,8,0,0" />
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,6">
+                            <CheckBox Content="Existing binding hostname matches certificate domains" IsChecked="{Binding Config.DeploymentBindingMatchHostname}" Margin="0,2" />
+                            <CheckBox Content="Binding hostname not specified (IP only or All Unassigned)" IsChecked="{Binding Config.DeploymentBindingBlankHostname}" Margin="0,2" />
+                            <CheckBox Content="Existing binding uses the previous version of this certificate" IsChecked="{Binding Config.DeploymentBindingReplacePrevious}" Margin="0,2" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="IIS Binding Settings" Style="{StaticResource SectionTitle}" Margin="0,14,0,4" />
+                    <TextBlock Text="When new https bindings need to be created, these settings are used:" Style="{StaticResource Hint}" />
+                    <RadioButton Content="Auto create/update IIS bindings (uses SNI)" IsChecked="{Binding UseSpecificBinding, Converter={StaticResource Not}}" Margin="0,2" GroupName="bindmode" />
+                    <RadioButton Content="Use specific IP/Port bindings" IsChecked="{Binding UseSpecificBinding}" Margin="0,2" GroupName="bindmode" />
+                    <StackPanel Orientation="Horizontal" Margin="24,6,0,0" Visibility="{Binding UseSpecificBinding, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="IP" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBox Text="{Binding Config.BindingIPAddress}" Width="140" mah:TextBoxHelper.Watermark="* = all unassigned" />
+                        <TextBlock Text="Port" VerticalAlignment="Center" Margin="14,0,6,0" />
+                        <TextBox Text="{Binding Config.BindingPort}" Width="70" />
+                        <CheckBox Content="Use SNI" IsChecked="{Binding Config.BindingUseSNI}" Margin="14,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="PFX password (stored credential, optional)" Style="{StaticResource FieldLabel}" Margin="0,16,0,2" />
+                    <TextBlock Text="Protect the stored PFX file with a password from Settings > Stored Credentials (type: Password)." Style="{StaticResource Hint}" />
+                    <ComboBox ItemsSource="{Binding DataContext.Settings.Credentials, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="Title" SelectedValuePath="StorageKey"
+                              SelectedValue="{Binding Item.CertificatePasswordCredentialId}" HorizontalAlignment="Left" MinWidth="300" />
+                </StackPanel>
+
+                <!-- ===== Tasks ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Tasks}">
+                    <TextBlock Text="Tasks" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="Tasks run before or after each certificate request or renewal: export files, deploy to other services and servers, run scripts or call webhooks." Style="{StaticResource Hint}" />
+                    <TextBlock Text="Deployment Tasks" FontSize="15" FontWeight="SemiBold" Margin="0,4" />
+                    <TextBlock Text="Run after the certificate is issued (or on failure, depending on the trigger)." Style="{StaticResource Hint}" />
+                    <ItemsControl ItemsSource="{Binding Tasks}" ItemTemplate="{StaticResource TaskTemplate}" />
+                    <Button Content="+ Add Deployment Task" HorizontalAlignment="Left" Style="{StaticResource ToolButton}"
+                            Command="{Binding DataContext.AddTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="post" />
+                    <TextBlock Text="Pre-Request Tasks" FontSize="15" FontWeight="SemiBold" Margin="0,18,0,4" />
+                    <TextBlock Text="Run before the certificate request starts, e.g. to open a firewall port or stop a service." Style="{StaticResource Hint}" />
+                    <ItemsControl ItemsSource="{Binding PreRequestTasks}" ItemTemplate="{StaticResource TaskTemplate}" />
+                    <Button Content="+ Add Pre-Request Task" HorizontalAlignment="Left" Style="{StaticResource ToolButton}"
+                            Command="{Binding DataContext.AddTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="pre" />
+                </StackPanel>
+
+                <!-- ===== Preview ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Preview}">
+                    <TextBlock Text="Preview" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="What will happen when this certificate is requested, based on the current (unsaved) settings. Nothing is changed." Style="{StaticResource Hint}" />
+                    <Button Content="Refresh preview" HorizontalAlignment="Left" Style="{StaticResource ToolButton}" Margin="0,0,0,8"
+                            Command="{Binding DataContext.PreviewCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    <ItemsControl ItemsSource="{Binding PreviewSteps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold" FontSize="14">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Foreground" Value="Firebrick" /></DataTrigger></Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                            <Run Text="{Binding Title, Mode=OneWay}" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                        <ItemsControl ItemsSource="{Binding Substeps}" Margin="14,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock TextWrapping="Wrap" Margin="0,1"><Run Text="• " /><Run Text="{Binding Title, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  " /><Run Text="{Binding Description, Mode=OneWay}" /></TextBlock>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- ===== Log ===== -->
+                <StackPanel Visibility="{Binding Section, Converter={StaticResource EqVis}, ConverterParameter=Log}">
+                    <TextBlock Text="Request Log" Style="{StaticResource SectionTitle}" />
+                    <ListBox ItemsSource="{Binding DataContext.Log, RelativeSource={RelativeSource AncestorType=Window}}" FontFamily="Consolas" MaxHeight="520">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock TextWrapping="Wrap"><Run Text="{Binding Timestamp, StringFormat=yyyy-MM-dd HH:mm:ss, Mode=OneWay}" Foreground="Gray" /><Run Text=" [" /><Run Text="{Binding Level, Mode=OneWay}" /><Run Text="] " /><Run Text="{Binding Message, Mode=OneWay}" /></TextBlock>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

@@ -1,9 +1,6 @@
-﻿using System.Globalization;
-using System.Windows;
-using System.Windows.Data;
-using System.Windows.Media;
+﻿using System.Windows;
+using System.Windows.Threading;
 using CertMaster.Client;
-using CertMaster.Models;
 using CertMaster.UI.Desktop.ViewModels;
 
 namespace CertMaster.UI.Desktop;
@@ -13,6 +10,8 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        DispatcherUnhandledException += OnUnhandled;
+
         AgentClient client;
         try
         {
@@ -25,7 +24,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Could not connect to the CertMaster Agent service.\n\n" + ex.Message, "CertMaster", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show("Could not connect to the CertMaster Agent service.\n\n" + ex.Message +
+                            "\n\nCheck that the 'CertMaster Agent' Windows service is installed and running.", "CertMaster", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1); return;
         }
 
@@ -35,17 +35,11 @@ public partial class App : Application
         window.Show();
         await vm.InitializeAsync();
     }
-}
 
-public class HealthToBrushConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
+    /// <summary>Keep the app alive on unexpected UI errors (e.g. agent restarted mid-call) and tell the user.</summary>
+    private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        ManagedCertificateHealth.OK => Brushes.SeaGreen,
-        ManagedCertificateHealth.Warning => Brushes.DarkOrange,
-        ManagedCertificateHealth.Error => Brushes.Firebrick,
-        _ => Brushes.Gray,
-    };
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+        MessageBox.Show(e.Exception.GetBaseException().Message, "CertMaster", MessageBoxButton.OK, MessageBoxImage.Warning);
+        e.Handled = true;
+    }
 }
