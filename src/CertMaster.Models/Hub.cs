@@ -46,6 +46,11 @@ public static class InstanceCommands
     public const string GetSites = "GetSites";
     public const string GetSiteDomains = "GetSiteDomains";
     public const string PerformDeploymentTask = "PerformDeploymentTask";
+    public const string GetUpdateStatus = "GetUpdateStatus";
+    public const string CheckForUpdates = "CheckForUpdates";
+    public const string InstallUpdate = "InstallUpdate";
+    public const string GetUpdateSettings = "GetUpdateSettings";
+    public const string SetUpdateSettings = "SetUpdateSettings";
 }
 
 /// <summary>Sent by an agent when it connects to the hub.</summary>

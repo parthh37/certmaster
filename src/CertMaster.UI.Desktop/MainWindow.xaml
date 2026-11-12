@@ -26,6 +26,23 @@
             <mah:ProgressRing IsActive="{Binding IsBusy}" Width="22" Height="22" Margin="12,0" />
         </StackPanel>
 
+        <!-- Update available banner -->
+        <Border DockPanel.Dock="Top" Margin="10,0,10,6" Padding="12,6" CornerRadius="3" DataContext="{Binding Updates}"
+                Background="{DynamicResource MahApps.Brushes.Accent4}" BorderBrush="{DynamicResource MahApps.Brushes.Accent}" BorderThickness="1"
+                Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Install Now" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}" />
+                    <Button Content="Release Notes" Style="{StaticResource ToolButton}" Command="{Binding OpenReleaseNotesCommand}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,2,8,0" FontSize="15" />
+                    <TextBlock Text="{Binding BannerText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <mah:ProgressRing IsActive="{Binding IsWorking}" Width="16" Height="16" Margin="10,0" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <TabControl SelectedIndex="{Binding SelectedTab}" Margin="10,0,10,6" mah:HeaderedControlHelper.HeaderFontSize="14" mah:TabControlHelper.Underlined="SelectedTabItem">
             <!-- ===== Managed Certificates ===== -->
             <TabItem Header="Managed Certificates">

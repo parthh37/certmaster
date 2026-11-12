@@ -87,6 +87,13 @@ public class AgentClient : IAsyncDisposable
         Post<ActionResult>("api/preferences/notifications/test", new TestNotificationRequest { Url = url });
     public Task<List<string>> GetServiceLogAsync(int lines = 500) => Get<List<string>>($"api/system/log?lines={lines}");
 
+    // ---------- updates ----------
+    public Task<UpdateStatus> GetUpdateStatusAsync() => Get<UpdateStatus>("api/system/updates");
+    public Task<UpdateStatus> CheckForUpdatesAsync() => Post<UpdateStatus>("api/system/updates/check");
+    public Task<ActionResult> InstallUpdateAsync() => Post<ActionResult>("api/system/updates/install");
+    public Task<UpdateSettings> GetUpdateSettingsAsync() => Get<UpdateSettings>("api/system/updates/settings");
+    public Task<UpdateSettings> SetUpdateSettingsAsync(UpdateSettings s) => Post<UpdateSettings>("api/system/updates/settings", s);
+
     // ---------- managed certificates ----------
     public Task<List<ManagedCertificate>> GetManagedCertificatesAsync(string? search = null) =>
         Get<List<ManagedCertificate>>("api/managedcertificates" + (string.IsNullOrEmpty(search) ? "" : "?search=" + E(search)));

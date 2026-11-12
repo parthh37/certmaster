@@ -13,6 +13,7 @@
                 <ResourceDictionary Source="Views/Styles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
             <local:HealthToBrushConverter x:Key="HealthBrush" />
             <local:HealthToTextConverter x:Key="HealthText" />
             <local:InverseBoolConverter x:Key="Not" />

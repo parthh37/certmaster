@@ -1,0 +1,28 @@
+@* Current/latest version and updater state for a hub or agent. *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+    <MudText Typo="Typo.body1">Version <b>@Status.CurrentVersion</b></MudText>
+    @if (Status.IsUpdateAvailable)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.NewReleases" Text="@($"{Status.LatestVersion} available")" />
+    }
+    else if (Status.LastChecked != null && Status.State != UpdateState.Failed)
+    {
+        <MudChip T="string" Size="Size.Small" Color="Color.Success" Text="Up to date" />
+    }
+    @if (Status.State is UpdateState.Checking or UpdateState.Downloading or UpdateState.Installing)
+    {
+        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+    }
+</MudStack>
+@if (!string.IsNullOrEmpty(Status.Message))
+{
+    <MudText Typo="Typo.body2" Color="@(Status.State == UpdateState.Failed ? Color.Error : Color.Default)" Class="mt-1">@Status.Message</MudText>
+}
+<MudText Typo="Typo.caption">
+    @(Status.LastChecked == null ? "Not checked yet." : $"Last checked {Status.LastChecked.Value.ToLocalTime():g}.")
+    @if (!Status.CanInstall) { <span> This copy was not installed with the Windows installer, so it cannot update itself.</span> }
+</MudText>
+
+@code {
+    [Parameter, EditorRequired] public UpdateStatus Status { get; set; } = default!;
+}

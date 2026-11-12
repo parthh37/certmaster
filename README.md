@@ -51,6 +51,8 @@ Website: **https://parthh37.github.io/certmaster/**
 - Hub roles: Administrator, CertificateManager and Viewer.
 - Expiring, revocable joining keys connect agents to the hub.
 - OpenAPI reference at `/docs` on the hub.
+- Updates: the agent and the hub check GitHub Releases daily and can install new versions themselves (see
+  [Updates](#updates)).
 
 ## Install
 
@@ -72,6 +74,30 @@ Both are self-contained (no .NET install needed) and support Windows 10 / Server
    Then in each server's CertMaster go to **Settings > Management Hub** and join.
 
 Production hub deployments should sit behind HTTPS (a reverse proxy, or Kestrel certificate configuration).
+
+### Updates
+
+The agent and the hub services each check [Releases](https://github.com/parthh37/certmaster/releases) once a day
+(10 minutes after start, then every `CheckIntervalHours`).
+
+- **Desktop app:** a banner appears when a new version is out. Use **Install Now** there, or **Settings > Updates**,
+  to check, install, or set up automatic updates for that server.
+- **Hub:** **Settings > Updates** (administrators) has the same controls for the hub itself, and a table of every
+  connected agent. From there you can check, install, **Update all agents**, or turn on automatic updates per agent.
+- **Automatic updates** are off by default. When on, an update installs inside the install window (02:00 to 05:00
+  server time by default; set the same hour twice to allow any time). The agent waits until no certificate request
+  is running.
+
+How an install works: the service downloads the installer into its data folder, which only SYSTEM and Administrators
+can access. It checks the file against the SHA-256 digest GitHub publishes for the release asset and refuses
+anything that doesn't match. It then runs setup silently with `/VERYSILENT`, which keeps your previous choices
+(components, hub port, firewall). Setup stops and restarts the service. The service is started again even if setup
+fails. The installer log goes to `logs\update-<version>.log` in the data folder. After the restart, the Updates
+page reports whether the service came back on the new version.
+
+Only copies installed with the Windows installer can update themselves. A build run from source shows updates but
+can't install them. To point a fork at its own releases, set `Updates:ReleasesUrl` in `appsettings.json` to a
+GitHub releases API URL.
 
 ## Build from source
 

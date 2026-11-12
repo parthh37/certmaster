@@ -1,0 +1,23 @@
+@* Edits UpdateSettings (hub or agent). *@
+<MudStack Spacing="1">
+    <MudSwitch T="bool" @bind-Value="Settings.CheckForUpdates" Color="Color.Primary" Label="Check for updates automatically" />
+    <MudSwitch T="bool" @bind-Value="Settings.InstallAutomatically" Color="Color.Primary" Disabled="!Settings.CheckForUpdates"
+               Label="Install updates automatically" />
+    <MudSwitch T="bool" @bind-Value="Settings.IncludePrereleases" Color="Color.Primary" Label="Include pre-release versions" />
+    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mt-2">
+        <MudNumericField T="int" @bind-Value="Settings.CheckIntervalHours" Label="Check every (hours)" Min="1" Max="168" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:180px" />
+        <MudNumericField T="int" @bind-Value="Settings.InstallWindowStartHour" Label="Install from (hour, 0-23)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:200px" />
+        <MudNumericField T="int" @bind-Value="Settings.InstallWindowEndHour" Label="until (hour, 0-23)" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:180px" />
+    </MudStack>
+    <MudText Typo="Typo.caption">
+        Automatic installs only start inside this window (server local time). Use the same hour for both to allow any time.
+        Installers are downloaded from GitHub Releases and verified against the SHA-256 digest GitHub publishes before they run.
+    </MudText>
+    <div><MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" Disabled="Busy" OnClick="() => OnSave.InvokeAsync(Settings)">Save update settings</MudButton></div>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public UpdateSettings Settings { get; set; } = default!;
+    [Parameter] public EventCallback<UpdateSettings> OnSave { get; set; }
+    [Parameter] public bool Busy { get; set; }
+}

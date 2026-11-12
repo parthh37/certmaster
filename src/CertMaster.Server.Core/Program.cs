@@ -39,6 +39,20 @@ builder.Services.AddSingleton<HubClientService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HubClientService>());
 builder.Services.AddHostedService<RenewalBackgroundService>();
 builder.Services.AddHostedService<MaintenanceService>();
+builder.Services.AddSingleton(sp =>
+{
+    var m = sp.GetRequiredService<CertManager>();
+    var updates = new CertMaster.Core.Updates.UpdateManager(CertMaster.Core.Updates.UpdateProduct.Agent,
+        sp.GetRequiredService<AgentIdentity>().Version, paths, sp.GetRequiredService<DocumentStore>(),
+        logger: sp.GetRequiredService<ILogger<CertMaster.Core.Updates.UpdateManager>>(),
+        releasesUrl: builder.Configuration["Updates:ReleasesUrl"]);
+    // Never restart the service under a running certificate request.
+    updates.InstallBlocker = () => m.RunningRequestCount > 0
+        ? $"Waiting for {m.RunningRequestCount} running certificate request(s) to finish before installing the update."
+        : null;
+    return updates;
+});
+builder.Services.AddHostedService<UpdateBackgroundService>();
 builder.Services.AddSingleton<SignalRProgressReporter>();
 builder.Services.AddProblemDetails();
 // Give running certificate requests time to finish cleanly when the service stops.

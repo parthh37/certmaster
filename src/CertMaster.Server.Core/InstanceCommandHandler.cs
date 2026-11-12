@@ -1,4 +1,5 @@
 using CertMaster.Core;
+using CertMaster.Core.Updates;
 using CertMaster.Models;
 using CertMaster.Models.Hub;
 
@@ -11,10 +12,11 @@ public class InstanceCommandHandler
     private readonly AgentIdentity _identity;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<InstanceCommandHandler> _logger;
+    private readonly UpdateManager _updates;
 
-    public InstanceCommandHandler(CertManager m, AgentIdentity identity, IHostApplicationLifetime lifetime, ILogger<InstanceCommandHandler> logger)
+    public InstanceCommandHandler(CertManager m, AgentIdentity identity, IHostApplicationLifetime lifetime, ILogger<InstanceCommandHandler> logger, UpdateManager updates)
     {
-        _m = m; _identity = identity; _lifetime = lifetime; _logger = logger;
+        _m = m; _identity = identity; _lifetime = lifetime; _logger = logger; _updates = updates;
     }
 
     private record IdArg(string Id);
@@ -55,6 +57,11 @@ public class InstanceCommandHandler
                 InstanceCommands.GetSites => await _m.GetSitesAsync(),
                 InstanceCommands.GetSiteDomains => await _m.GetDomainOptionsFromSiteAsync(Arg<IdArg>(cmd)!.Id),
                 InstanceCommands.PerformDeploymentTask => await RunTask(Arg<TaskArg>(cmd)!),
+                InstanceCommands.GetUpdateStatus => _updates.GetStatus(),
+                InstanceCommands.CheckForUpdates => await _updates.CheckAsync(_lifetime.ApplicationStopping),
+                InstanceCommands.InstallUpdate => await _updates.BeginInstallAsync(_lifetime.ApplicationStopping),
+                InstanceCommands.GetUpdateSettings => await _updates.GetSettingsAsync(),
+                InstanceCommands.SetUpdateSettings => await _updates.SetSettingsAsync(Arg<UpdateSettings>(cmd)!),
                 _ => throw new NotSupportedException($"Unknown command {cmd.CommandType}"),
             };
             return new InstanceCommandResult { CommandId = cmd.CommandId, IsSuccess = true, Result = JsonDefaults.Serialize(result) };

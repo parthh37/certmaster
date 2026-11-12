@@ -175,6 +175,8 @@ public partial class CertManager
     public List<LogEntry> GetItemLog(string id, int limit = 1000) => ItemLog.Read(_paths, id, limit);
 
     public bool IsRequestInProgress(string id) => _running.ContainsKey(id);
+    /// <summary>Number of certificate requests running now (an update install waits until this is zero).</summary>
+    public int RunningRequestCount => _running.Count;
 
     // ---------- Challenge selection helpers ----------
 
