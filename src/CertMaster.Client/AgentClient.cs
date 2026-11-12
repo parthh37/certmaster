@@ -45,7 +45,7 @@ public class AgentClient : IAsyncDisposable
         _status = new HubConnectionBuilder()
             .WithUrl(_baseUrl + "/api/status", o => o.Headers["X-Api-Key"] = _apiKey)
             .AddJsonProtocol(o => JsonDefaults.Apply(o.PayloadSerializerOptions))
-            .WithAutomaticReconnect()
+            .WithAutomaticReconnect(new CertMaster.Hosting.ForeverRetryPolicy())
             .Build();
         _status.On<RequestProgressState>("RequestProgressStateUpdated", s => ProgressReceived?.Invoke(s));
         _status.On<ManagedCertificate>("ManagedCertificateUpdated", i => ManagedCertificateUpdated?.Invoke(i));

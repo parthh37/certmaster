@@ -24,4 +24,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Start-up, logging and crash handling shared by the agent and hub services. -->
+    <Compile Include="..\Shared\ServiceHosting.cs" Link="Shared\ServiceHosting.cs" />
+  </ItemGroup>
+
 </Project>

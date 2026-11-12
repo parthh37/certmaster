@@ -49,6 +49,14 @@ public class MicrosoftDnsProvider : DnsProviderBase
         } elseif ($server) {
             $p.ComputerName = $server
         }
+        # Existing TXT values for the name. "Not found" means none; any other error (access denied, RPC, zone missing)
+        # must fail the step rather than look like success.
+        function Get-ExistingTxt {
+            try { @(Get-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -Name $env:CM_DNS_NAME -RRType Txt -ErrorAction Stop) }
+            catch [Microsoft.Management.Infrastructure.CimException] {
+                if ($_.CategoryInfo.Category -eq 'ObjectNotFound' -or "$($_.Exception.MessageId)" -match '9714') { @() } else { throw }
+            }
+        }
         try {
             switch ($env:CM_DNS_ACTION) {
                 'zones' {
@@ -56,7 +64,7 @@ public class MicrosoftDnsProvider : DnsProviderBase
                         ForEach-Object { 'ZONE:' + $_.ZoneName }
                 }
                 'add' {
-                    $existing = @(Get-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -Name $env:CM_DNS_NAME -RRType Txt -ErrorAction SilentlyContinue)
+                    $existing = @(Get-ExistingTxt)
                     if ($existing | Where-Object { $_.RecordData.DescriptiveText -eq $env:CM_DNS_VALUE }) { 'EXISTS' }
                     else {
                         Add-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -Name $env:CM_DNS_NAME -Txt -DescriptiveText $env:CM_DNS_VALUE -TimeToLive (New-TimeSpan -Seconds 60)
@@ -64,9 +72,8 @@ public class MicrosoftDnsProvider : DnsProviderBase
                     }
                 }
                 'remove' {
-                    $ours = @(Get-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -Name $env:CM_DNS_NAME -RRType Txt -ErrorAction SilentlyContinue |
-                        Where-Object { $_.RecordData.DescriptiveText -eq $env:CM_DNS_VALUE })
-                    foreach ($r in $ours) { Remove-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -InputObject $r -Force }
+                    $ours = @(Get-ExistingTxt | Where-Object { $_.RecordData.DescriptiveText -eq $env:CM_DNS_VALUE })
+                    foreach ($r in $ours) { Remove-DnsServerResourceRecord @p -ZoneName $env:CM_DNS_ZONE -InputObject $r -Force -ErrorAction Stop }
                     'REMOVED:' + $ours.Count
                 }
                 default { throw "Unknown action $($env:CM_DNS_ACTION)" }
@@ -94,8 +101,7 @@ public class MicrosoftDnsProvider : DnsProviderBase
             ["CM_DNS_DOMAIN"] = ctx.Cred("domain") ?? "",
         };
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(Script));
-        var exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
-        if (!File.Exists(exe)) exe = "powershell.exe";
+        var exe = ProcessRunner.PowerShellExe; // full System32 path: no search-path lookup
         var r = await ProcessRunner.RunAsync(exe, new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded }, env, TimeSpan.FromMinutes(2));
         if (r.ExitCode != 0)
         {

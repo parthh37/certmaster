@@ -49,15 +49,41 @@ public class DeploymentContext
 
     public int? ParamInt(string key) => int.TryParse(Param(key), out var i) ? i : null;
 
+    /// <summary>
+    /// Private folder for temporary files handed to scripts (result/argument JSON). Null = <see cref="DefaultScriptTempFolder"/>
+    /// (temp under the agent data folder). The folder is restricted to SYSTEM, Administrators and the agent account before use.
+    /// </summary>
+    public string? ScriptTempFolder { get; init; }
+
+    /// <summary>The agent data folder's "temp" subfolder (CERTMASTER_DATA, else %ProgramData%\CertMaster), never the shared system temp folder.</summary>
+    public static string DefaultScriptTempFolder()
+    {
+        var root = Environment.GetEnvironmentVariable("CERTMASTER_DATA") is { Length: > 0 } data ? data
+            : OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "CertMaster")
+            : "/var/lib/certmaster";
+        return Path.Combine(root, "temp");
+    }
+
     /// <summary>Replaces {placeholders} with certificate values.</summary>
-    public string Expand(string text) => text
-        .Replace("{ManagedItemId}", Item.Id).Replace("{Name}", Item.Name)
-        .Replace("{PrimaryDomain}", Item.RequestConfig.PrimaryDomain)
-        .Replace("{Thumbprint}", Item.CertificateThumbprintHash ?? "")
-        .Replace("{CertificatePath}", Item.CertificatePath ?? "")
-        .Replace("{DateExpiry}", Item.DateExpiry?.ToString("O") ?? "")
-        .Replace("{IsSuccess}", (RequestSucceeded ?? true).ToString().ToLowerInvariant())
-        .Replace("{Message}", RequestMessage ?? "");
+    public string Expand(string text) => Expand(text, static v => v);
+
+    /// <summary>
+    /// Replaces {placeholders} with certificate values passed through <paramref name="encode"/>, e.g. JSON string escaping for a
+    /// JSON body (see <see cref="JsonStringEncoder"/>) or <see cref="Uri.EscapeDataString(string)"/> for a URL, so values with quotes,
+    /// backslashes, newlines or reserved characters can't break the surrounding syntax.
+    /// </summary>
+    public string Expand(string text, Func<string, string> encode) => text
+        .Replace("{ManagedItemId}", encode(Item.Id)).Replace("{Name}", encode(Item.Name))
+        .Replace("{PrimaryDomain}", encode(Item.RequestConfig.PrimaryDomain))
+        .Replace("{Thumbprint}", encode(Item.CertificateThumbprintHash ?? ""))
+        .Replace("{CertificatePath}", encode(Item.CertificatePath ?? ""))
+        .Replace("{DateExpiry}", encode(Item.DateExpiry?.ToString("O") ?? ""))
+        .Replace("{IsSuccess}", encode((RequestSucceeded ?? true).ToString().ToLowerInvariant()))
+        .Replace("{Message}", encode(RequestMessage ?? ""));
+
+    /// <summary>Escapes a value for use inside a JSON string literal (no surrounding quotes are added).</summary>
+    public static string JsonStringEncoder(string value) =>
+        System.Text.Json.JsonEncodedText.Encode(value, System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping).ToString();
 }
 
 public interface IDeploymentTaskProvider

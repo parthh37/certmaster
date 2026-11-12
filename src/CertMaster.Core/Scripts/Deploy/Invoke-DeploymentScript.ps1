@@ -23,7 +23,7 @@ try {
     $named = @{}
     $positional = @()
     if ($ArgumentsJsonPath -and (Test-Path -LiteralPath $ArgumentsJsonPath)) {
-        $parsed = Get-Content -LiteralPath $ArgumentsJsonPath -Raw | ConvertFrom-Json
+        $parsed = Get-Content -LiteralPath $ArgumentsJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($parsed.named) {
             foreach ($p in $parsed.named.PSObject.Properties) { $named[$p.Name] = [string]$p.Value }
         }
@@ -32,11 +32,14 @@ try {
 
     if ($PassResult) {
         if (-not $ResultJsonPath -or -not (Test-Path -LiteralPath $ResultJsonPath)) { throw "Result file not found: $ResultJsonPath" }
-        $result = Get-Content -LiteralPath $ResultJsonPath -Raw | ConvertFrom-Json
+        $result = Get-Content -LiteralPath $ResultJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $positional = @($result) + $positional
     }
 
     $global:LASTEXITCODE = 0
+    # The wrapper uses Stop for its own setup, but that preference would leak into the user script through dynamic
+    # scoping and turn its non-terminating errors into failures. Run the script with the PowerShell default.
+    $ErrorActionPreference = 'Continue'
     & $ScriptPath @positional @named
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     exit 0

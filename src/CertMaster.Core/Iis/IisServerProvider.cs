@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.ServiceProcess;
+using CertMaster.Core.Providers.Deployment;
 using CertMaster.Models;
 using Microsoft.Web.Administration;
 using Microsoft.Win32;
@@ -184,17 +185,36 @@ public sealed class IisServerProvider : IWebServerProvider
     [SupportedOSPlatform("windows")]
     private static ActionResult<string> ImportWindows(string pfxPath, string? pfxPassword, string friendlyNamePrefix)
     {
-        var collection = X509CertificateLoader.LoadPkcs12CollectionFromFile(pfxPath, pfxPassword,
-            X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+        // Read the PFX without persisting its key first. Importing a certificate that is already in the store with its key
+        // would create another key container in MachineKeys each time and drop the ACL granted on the current key.
+        var collection = X509CertificateLoader.LoadPkcs12CollectionFromFile(pfxPath, pfxPassword, X509KeyStorageFlags.EphemeralKeySet);
         try
         {
             var leaf = collection.FirstOrDefault(c => c.HasPrivateKey);
             if (leaf == null) return new ActionResult<string> { Message = "The PFX file does not contain a certificate with a private key." };
-            leaf.FriendlyName = $"{friendlyNamePrefix} [CertMaster] {leaf.NotBefore:yyyyMMdd}";
+            var friendlyName = $"{friendlyNamePrefix} [CertMaster] {leaf.NotBefore:yyyyMMdd}";
+            var reused = false;
             using (var my = new X509Store(CertificateStoreName, StoreLocation.LocalMachine))
             {
                 my.Open(OpenFlags.ReadWrite);
-                my.Add(leaf);
+                if (CertificateStoreHelper.TryUseExisting(my, leaf.Thumbprint, friendlyName)) reused = true;
+                else
+                {
+                    // not there, or there without a usable key: import (again) with a persisted machine key
+                    var persisted = X509CertificateLoader.LoadPkcs12CollectionFromFile(pfxPath, pfxPassword,
+                        X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+                    try
+                    {
+                        var persistedLeaf = persisted.FirstOrDefault(c => c.HasPrivateKey && c.Thumbprint == leaf.Thumbprint)
+                                            ?? throw new CryptographicException("The PFX file changed while it was being imported.");
+                        persistedLeaf.FriendlyName = friendlyName;
+                        my.Add(persistedLeaf);
+                    }
+                    finally
+                    {
+                        foreach (var c in persisted) c.Dispose();
+                    }
+                }
             }
 
             var note = "";
@@ -203,11 +223,18 @@ public sealed class IisServerProvider : IWebServerProvider
                 using var ca = new X509Store(StoreName.CertificateAuthority, StoreLocation.LocalMachine);
                 ca.Open(OpenFlags.ReadWrite);
                 foreach (var issuer in collection.Where(c => !ReferenceEquals(c, leaf) && c.Subject != c.Issuer))
-                    if (ca.Certificates.Find(X509FindType.FindByThumbprint, issuer.Thumbprint, false).Count == 0) ca.Add(issuer);
+                {
+                    var present = CertificateStoreHelper.Find(ca, issuer.Thumbprint);
+                    try { if (present.Count == 0) ca.Add(issuer); }
+                    finally { CertificateStoreHelper.DisposeAll(present); }
+                }
             }
             catch (CryptographicException ex) { note = $" (intermediate certificates not stored: {ex.Message})"; }
 
-            return new ActionResult<string> { IsSuccess = true, Result = leaf.Thumbprint, Message = $"Imported {leaf.Thumbprint} into LocalMachine\\{CertificateStoreName}{note}" };
+            var message = reused
+                ? $"{leaf.Thumbprint} is already in LocalMachine\\{CertificateStoreName} with its private key; kept the existing key{note}"
+                : $"Imported {leaf.Thumbprint} into LocalMachine\\{CertificateStoreName}{note}";
+            return new ActionResult<string> { IsSuccess = true, Result = leaf.Thumbprint, Message = message };
         }
         finally
         {

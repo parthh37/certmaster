@@ -10,7 +10,8 @@ public static partial class PowerShellHelper
     public static string ScriptsFolder => Path.Combine(AppContext.BaseDirectory, "Scripts", "Deploy");
     public static string GetScriptPath(string name) => Path.Combine(ScriptsFolder, name);
 
-    public static string PowerShellExe => OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+    /// <summary>Windows PowerShell by full System32 path on Windows (never resolved via the search path); pwsh elsewhere.</summary>
+    public static string PowerShellExe => ProcessRunner.PowerShellExe;
 
     /// <summary>
     /// Runs a bundled script with named parameters. Values are passed as separate process arguments (never concatenated
@@ -52,6 +53,18 @@ public static partial class PowerShellHelper
         if (!OperatingSystem.IsWindows()) return false;
         using var store = new X509Store(storeName, StoreLocation.LocalMachine);
         store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
-        return store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, false).Count > 0;
+        // Both the store snapshot and the Find result hold native certificate contexts; release them deterministically.
+        var all = store.Certificates;
+        X509Certificate2Collection? found = null;
+        try
+        {
+            found = all.Find(X509FindType.FindByThumbprint, thumbprint, false);
+            return found.Count > 0;
+        }
+        finally
+        {
+            if (found != null) foreach (var c in found) c.Dispose();
+            foreach (var c in all) c.Dispose();
+        }
     }
 }
