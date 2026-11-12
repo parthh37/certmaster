@@ -1,0 +1,54 @@
+@page "/login"
+@inject HubClient Hub
+@inject HubSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Sign in - CertMaster</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="d-flex align-center" Style="min-height:100vh">
+    <MudPaper Elevation="3" Class="pa-8" Style="width:100%">
+        <MudStack AlignItems="AlignItems.Center" Class="mb-6">
+            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Primary" Style="font-size:3rem" />
+            <MudText Typo="Typo.h5">CertMaster Management Hub</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Sign in to manage certificates across your servers</MudText>
+        </MudStack>
+        <EditForm Model="this" OnValidSubmit="SignIn">
+            <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined" Class="mb-4" AutoFocus="true" />
+            <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-4" />
+            @if (_error != null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@_error</MudAlert>
+            }
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="_busy">
+                @(_busy ? "Signing in..." : "Sign in")
+            </MudButton>
+        </EditForm>
+        <MudText Typo="Typo.caption" Class="mt-6 d-block" Color="Color.Secondary">
+            First run? The initial admin password is in <span class="cm-mono">initial-admin-password.txt</span> in the hub data folder.
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string _username = "", _password = "";
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.EnsureLoadedAsync();
+        if (Session.IsAuthenticated) Nav.NavigateTo("/");
+    }
+
+    private async Task SignIn()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Hub.LoginAsync(_username, _password);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

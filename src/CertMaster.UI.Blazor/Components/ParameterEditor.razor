@@ -1,0 +1,49 @@
+@* Renders a dynamic form for provider parameters and keeps Settings in sync. *@
+
+@foreach (var p in Definitions.Where(d => !d.IsCredential || IncludeCredentialFields))
+{
+    var key = p.Key;
+    switch (p.Type)
+    {
+        case OptionType.Boolean:
+            <MudSwitch T="bool" Color="Color.Primary" Label="@p.Name" Disabled="ReadOnly"
+                       Value="@(Get(key, p.Value) == "true")" ValueChanged="@(v => Set(key, v ? "true" : "false"))" />
+            break;
+        case OptionType.Select:
+            <MudSelect T="string" Label="@p.Name" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Disabled="ReadOnly"
+                       Value="@Get(key, p.Value)" ValueChanged="@(v => Set(key, v))" HelperText="@p.Description">
+                @foreach (var o in p.GetOptions())
+                {
+                    <MudSelectItem T="string" Value="@o.Key">@o.Value</MudSelectItem>
+                }
+            </MudSelect>
+            break;
+        case OptionType.MultiLineText:
+            <MudTextField T="string" Label="@p.Name" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" Class="mb-3 cm-mono" Disabled="ReadOnly"
+                          Value="@Get(key, p.Value)" ValueChanged="@(v => Set(key, v))" HelperText="@p.Description" Required="p.IsRequired" />
+            break;
+        default:
+            <MudTextField T="string" Label="@p.Name" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Disabled="ReadOnly"
+                          InputType="@(p.Type == OptionType.Password ? InputType.Password : p.Type == OptionType.Number ? InputType.Number : InputType.Text)"
+                          Value="@Get(key, p.Value)" ValueChanged="@(v => Set(key, v))" HelperText="@p.Description" Required="p.IsRequired" />
+            break;
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public List<ProviderParameter> Definitions { get; set; } = new();
+    [Parameter, EditorRequired] public List<ProviderParameterSetting> Settings { get; set; } = new();
+    [Parameter] public bool IncludeCredentialFields { get; set; }
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public EventCallback SettingsChanged { get; set; }
+
+    private string? Get(string key, string? defaultValue) => Settings.FirstOrDefault(s => s.Key == key)?.Value ?? defaultValue;
+
+    private async Task Set(string key, string? value)
+    {
+        var existing = Settings.FirstOrDefault(s => s.Key == key);
+        if (existing == null) Settings.Add(new ProviderParameterSetting(key, value));
+        else existing.Value = value;
+        await SettingsChanged.InvokeAsync();
+    }
+}

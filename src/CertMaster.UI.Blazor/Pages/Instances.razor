@@ -1,0 +1,128 @@
+@page "/instances"
+@inject HubClient Hub
+@inject HubSession Session
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+
+<PageTitle>Instances - CertMaster</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Managed Instances</MudText>
+    <MudSpacer />
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" />
+</MudStack>
+
+<MudTable T="ManagedInstanceInfo" Items="_instances" Dense="true" Hover="true" Loading="_loading" Class="mb-6">
+    <HeaderContent>
+        <MudTh>Instance</MudTh><MudTh>Status</MudTh><MudTh>OS</MudTh><MudTh>Version</MudTh><MudTh>Certificates</MudTh><MudTh>Last reported</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Title<br /><MudText Typo="Typo.caption" Class="cm-mono">@context.InstanceId</MudText></MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small" Color="@(context.IsConnected ? Color.Success : Color.Default)" Text="@(context.IsConnected ? "Connected" : "Offline")" /></MudTd>
+        <MudTd><MudText Typo="Typo.caption">@context.OS</MudText></MudTd>
+        <MudTd>@context.ClientVersion</MudTd>
+        <MudTd>
+            @if (context.Summary is { } s)
+            {
+                <span>@s.Total total, <span style="color:var(--mud-palette-success)">@s.Healthy ok</span>, <span style="color:var(--mud-palette-error)">@s.Error error</span></span>
+            }
+        </MudTd>
+        <MudTd>@context.DateLastReported?.ToLocalTime().ToString("g")</MudTd>
+        <MudTd>
+            @if (context.IsConnected && Session.CanManage)
+            {
+                <MudTooltip Text="Renew due certificates now"><MudIconButton Icon="@Icons.Material.Filled.Autorenew" Size="Size.Small" OnClick="@(() => RenewAll(context))" /></MudTooltip>
+            }
+            @if (Session.IsAdmin)
+            {
+                <MudTooltip Text="Remove instance"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(context))" /></MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent><MudText>No instances have joined this hub yet.</MudText></NoRecordsContent>
+</MudTable>
+
+@if (Session.IsAdmin)
+{
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudText Typo="Typo.h6">Joining keys</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Agents join this hub with a joining key. On each server, open the CertMaster desktop app: Settings &gt; Management Hub, enter this hub's URL
+            (<span class="cm-mono">@Nav.BaseUri.TrimEnd('/')</span>) and the key. Agents connect outbound to the hub, so no inbound firewall rule is needed on the servers.
+        </MudText>
+        @if (_createdKey != null)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-3">
+                New joining key (copy it now, it will not be shown again):<br /><b class="cm-mono cm-key">@_createdKey.Key</b>
+            </MudAlert>
+        }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudTextField @bind-Value="_keyTitle" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudNumericField T="int?" @bind-Value="_keyExpiry" Label="Expires in (days, blank = never)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Key" OnClick="CreateKey">Create key</MudButton>
+        </MudStack>
+        <MudSimpleTable Dense="true">
+            <thead><tr><th>Title</th><th>Created</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var k in _keys)
+                {
+                    var expired = k.DateExpiry != null && k.DateExpiry < DateTimeOffset.UtcNow;
+                    <tr>
+                        <td>@k.Title</td><td>@k.DateCreated.ToLocalTime().ToString("g")</td><td>@(k.DateExpiry?.ToLocalTime().ToString("g") ?? "Never")</td>
+                        <td>@(k.IsRevoked ? "Revoked" : expired ? "Expired" : "Active")</td>
+                        <td>@if (!k.IsRevoked) { <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => Revoke(k))">Revoke</MudButton> }</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
+@code {
+    private List<ManagedInstanceInfo> _instances = new();
+    private List<JoiningKey> _keys = new();
+    private JoiningKey? _createdKey;
+    private string _keyTitle = "Servers";
+    private int? _keyExpiry = 30;
+    private bool _loading;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try
+        {
+            _instances = await Hub.GetInstancesAsync();
+            if (Session.IsAdmin) _keys = await Hub.GetJoiningKeysAsync();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task CreateKey()
+    {
+        try { _createdKey = await Hub.CreateJoiningKeyAsync(_keyTitle, _keyExpiry); await Load(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Revoke(JoiningKey k)
+    {
+        try { await Hub.RevokeJoiningKeyAsync(k.Id); await Load(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task RenewAll(ManagedInstanceInfo i)
+    {
+        try { var r = await Hub.RenewAllAsync(i.InstanceId); Snackbar.Add(r.Message ?? "", Severity.Info); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Remove(ManagedInstanceInfo i)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Remove instance", $"Remove '{i.Title}' from the hub? It will need a new joining key to rejoin.", yesText: "Remove", cancelText: "Cancel") != true) return;
+        try { await Hub.RemoveInstanceAsync(i.InstanceId); await Load(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

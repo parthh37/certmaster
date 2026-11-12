@@ -1,0 +1,21 @@
+<MudChip T="string" Size="Size.Small" Color="@ColorFor" Variant="Variant.Filled" Text="@Label" />
+
+@code {
+    [Parameter] public ManagedCertificateHealth Health { get; set; }
+
+    private Color ColorFor => Health switch
+    {
+        ManagedCertificateHealth.OK => Color.Success,
+        ManagedCertificateHealth.Warning => Color.Warning,
+        ManagedCertificateHealth.Error => Color.Error,
+        _ => Color.Default,
+    };
+
+    private string Label => Health switch
+    {
+        ManagedCertificateHealth.OK => "OK",
+        ManagedCertificateHealth.AwaitingUser => "Not requested",
+        ManagedCertificateHealth.Unknown => "Unknown",
+        _ => Health.ToString(),
+    };
+}

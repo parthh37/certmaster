@@ -1,0 +1,107 @@
+@page "/accounts"
+@inject HubClient Hub
+@inject HubSession Session
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Certificate Authorities - CertMaster</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Certificate Authorities</MudText>
+    <MudSpacer />
+    <InstanceSelector Value="_iid" ValueChanged="Select" />
+</MudStack>
+
+@if (_iid == null) { <MudAlert Severity="Severity.Info">Select a connected instance.</MudAlert> return; }
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.h6" Class="mb-2">ACME accounts</MudText>
+            <MudSimpleTable Dense="true">
+                <thead><tr><th>Certificate Authority</th><th>Email</th><th>Environment</th><th>Account</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var a in _accounts)
+                    {
+                        <tr>
+                            <td>@(_cas.FirstOrDefault(c => c.Id == a.CertificateAuthorityId)?.Title ?? a.CertificateAuthorityId)</td>
+                            <td>@a.Email</td>
+                            <td>@(a.IsStagingAccount ? "Staging" : "Production")</td>
+                            <td class="cm-mono" style="font-size:.75rem">@a.AccountURI</td>
+                            <td>@if (Session.CanManage) { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(a))" /> }</td>
+                        </tr>
+                    }
+                    @if (_accounts.Count == 0) { <tr><td colspan="5">No accounts yet. Add one to start requesting certificates.</td></tr> }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
+    @if (Session.CanManage)
+    {
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Add ACME account</MudText>
+                <MudSelect T="string" @bind-Value="_req.CertificateAuthorityId" Label="Certificate Authority" Variant="Variant.Outlined" Class="mb-3">
+                    @foreach (var ca in _cas) { <MudSelectItem T="string" Value="@ca.Id">@ca.Title</MudSelectItem> }
+                </MudSelect>
+                @if (SelectedCa is { } sel)
+                {
+                    <MudText Typo="Typo.caption" Class="mb-3 d-block">@sel.Description</MudText>
+                    <MudTextField @bind-Value="_req.Email" Label="Email address" Variant="Variant.Outlined" Class="mb-3" />
+                    <MudSwitch T="bool" @bind-Value="_req.IsStaging" Label="Staging (test) account" Disabled="string.IsNullOrEmpty(sel.StagingAPIEndpoint)" />
+                    @if (sel.RequiresExternalAccountBinding)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">@(sel.EabInstructions ?? "This CA requires External Account Binding credentials.")</MudAlert>
+                        <MudTextField @bind-Value="_req.EabKeyId" Label="EAB Key Id" Variant="Variant.Outlined" Class="mb-3" />
+                        <MudTextField @bind-Value="_req.EabKey" Label="EAB HMAC Key" Variant="Variant.Outlined" InputType="InputType.Password" Class="mb-3" />
+                    }
+                    <MudCheckBox T="bool" @bind-Value="_req.AgreedToTermsAndConditions">
+                        I agree to the <MudLink Href="@sel.TermsAndConditionsUrl" Target="_blank">@sel.Title terms</MudLink>
+                    </MudCheckBox>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="Add" Disabled="_busy">@(_busy ? "Registering..." : "Register account")</MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private string? _iid;
+    private List<AccountDetails> _accounts = new();
+    private List<CertificateAuthority> _cas = new();
+    private NewAccountRequest _req = new();
+    private bool _busy;
+    private CertificateAuthority? SelectedCa => _cas.FirstOrDefault(c => c.Id == _req.CertificateAuthorityId);
+
+    private async Task Select(string? iid)
+    {
+        _iid = iid;
+        if (iid == null) return;
+        try
+        {
+            _cas = await Hub.GetAuthoritiesAsync(iid);
+            _accounts = await Hub.GetAccountsAsync(iid);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Add()
+    {
+        _busy = true;
+        try
+        {
+            var r = await Hub.AddAccountAsync(_iid!, _req);
+            Snackbar.Add(r.Message ?? "", r.IsSuccess ? Severity.Success : Severity.Error);
+            if (r.IsSuccess) { _req = new NewAccountRequest(); await Select(_iid); }
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _busy = false; }
+    }
+
+    private async Task Remove(AccountDetails a)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Remove account", $"Remove the account {a.Email}? Certificates using this CA will fail to renew until a new account is added.", yesText: "Remove", cancelText: "Cancel") != true) return;
+        try { await Hub.RemoveAccountAsync(_iid!, a.StorageKey); await Select(_iid); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

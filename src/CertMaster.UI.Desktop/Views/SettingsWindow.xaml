@@ -1,0 +1,115 @@
+<mah:MetroWindow x:Class="CertMaster.UI.Desktop.Views.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+                 Title="Settings" Height="640" Width="900" WindowStartupLocation="CenterOwner"
+                 GlowBrush="{DynamicResource MahApps.Brushes.Accent}">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Message}" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,6,0,0" TextWrapping="Wrap" />
+        <TabControl>
+            <!-- Certificate authorities / ACME accounts -->
+            <TabItem Header="Certificate Authorities">
+                <Grid Margin="4,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                    <DataGrid ItemsSource="{Binding Accounts}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="CA" Binding="{Binding CertificateAuthorityId}" />
+                            <DataGridTextColumn Header="Email" Binding="{Binding Email}" />
+                            <DataGridCheckBoxColumn Header="Staging" Binding="{Binding IsStagingAccount}" />
+                            <DataGridTemplateColumn>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><Button Content="Remove" Command="{Binding DataContext.RemoveAccountCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Register ACME account" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="Certificate Authority" FontWeight="SemiBold" />
+                        <ComboBox ItemsSource="{Binding Authorities}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedAuthority}" Margin="0,2,0,4" />
+                        <TextBlock Text="{Binding SelectedAuthority.Description}" Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <TextBlock Text="Email address" FontWeight="SemiBold" />
+                        <TextBox Text="{Binding AccountEmail}" Margin="0,2,0,8" />
+                        <mah:ToggleSwitch Header="Staging (test) account" IsOn="{Binding AccountStaging}" />
+                        <StackPanel Visibility="{Binding SelectedAuthority.RequiresExternalAccountBinding, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding SelectedAuthority.EabInstructions}" Foreground="Gray" TextWrapping="Wrap" />
+                            <TextBlock Text="EAB Key Id" FontWeight="SemiBold" Margin="0,6,0,0" />
+                            <TextBox Text="{Binding EabKeyId}" />
+                            <TextBlock Text="EAB HMAC Key" FontWeight="SemiBold" Margin="0,6,0,0" />
+                            <TextBox Text="{Binding EabKey}" />
+                        </StackPanel>
+                        <CheckBox IsChecked="{Binding AccountAgree}" Content="I agree to the CA's terms and conditions" Margin="0,10" />
+                        <Button Content="Register Account" Command="{Binding AddAccountCommand}" Style="{DynamicResource MahApps.Styles.Button.Square.Accent}" HorizontalAlignment="Left" Padding="14,6" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Stored credentials -->
+            <TabItem Header="Stored Credentials">
+                <Grid Margin="4,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+                    <DataGrid ItemsSource="{Binding Credentials}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" />
+                            <DataGridTextColumn Header="Type" Binding="{Binding ProviderType}" />
+                            <DataGridTextColumn Header="Created" Binding="{Binding DateCreated, StringFormat=d}" />
+                            <DataGridTemplateColumn>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><Button Content="Delete" Command="{Binding DataContext.DeleteCredentialCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Add credential" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="Type" FontWeight="SemiBold" />
+                            <ComboBox ItemsSource="{Binding CredentialTypes}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedCredentialType}" Margin="0,2,0,8" />
+                            <TextBlock Text="Title" FontWeight="SemiBold" />
+                            <TextBox Text="{Binding CredentialTitle}" Margin="0,2,0,8" />
+                            <ItemsControl ItemsSource="{Binding CredentialFields}" />
+                            <Button Content="Save Credential" Command="{Binding AddCredentialCommand}" Style="{DynamicResource MahApps.Styles.Button.Square.Accent}" HorizontalAlignment="Left" Padding="14,6" />
+                            <TextBlock Text="Secrets are encrypted with Windows DPAPI on this machine." Foreground="Gray" Margin="0,8" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Management Hub -->
+            <TabItem Header="Management Hub">
+                <StackPanel Margin="4,10" MaxWidth="560" HorizontalAlignment="Left">
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10">Join this server to a CertMaster Management Hub to manage its certificates centrally. The agent connects outbound to the hub; no inbound port is needed.</TextBlock>
+                    <TextBlock Text="Status" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding HubStatus}" TextWrapping="Wrap" Margin="0,2,0,10" />
+                    <TextBlock Text="Hub URL" FontWeight="SemiBold" />
+                    <TextBox Text="{Binding HubUrl}" mah:TextBoxHelper.Watermark="https://hub.example.com" Margin="0,2,0,8" />
+                    <TextBlock Text="Joining key" FontWeight="SemiBold" />
+                    <TextBox Text="{Binding JoiningKey}" Margin="0,2,0,10" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Join Hub" Command="{Binding JoinHubCommand}" Style="{DynamicResource MahApps.Styles.Button.Square.Accent}" Padding="14,6" Margin="0,0,6,0" />
+                        <Button Content="Leave Hub" Command="{Binding LeaveHubCommand}" Style="{DynamicResource MahApps.Styles.Button.Square}" Padding="14,6" Margin="0,0,6,0" />
+                        <Button Content="Refresh" Command="{Binding RefreshHubCommand}" Style="{DynamicResource MahApps.Styles.Button.Square}" Padding="14,6" />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <!-- General preferences -->
+            <TabItem Header="General">
+                <StackPanel Margin="4,10" MaxWidth="560" HorizontalAlignment="Left" DataContext="{Binding Preferences}">
+                    <TextBlock Text="Renew when this many days remain before expiry" FontWeight="SemiBold" />
+                    <mah:NumericUpDown Value="{Binding RenewalIntervalDays}" Minimum="1" Maximum="60" Width="140" HorizontalAlignment="Left" Margin="0,2,0,10" />
+                    <TextBlock Text="Check for renewals every (minutes)" FontWeight="SemiBold" />
+                    <mah:NumericUpDown Value="{Binding RenewalCheckIntervalMinutes}" Minimum="5" Maximum="1440" Width="140" HorizontalAlignment="Left" Margin="0,2,0,10" />
+                    <TextBlock Text="Maximum renewals per run (0 = unlimited)" FontWeight="SemiBold" />
+                    <mah:NumericUpDown Value="{Binding MaxRenewalRequests}" Minimum="0" Maximum="1000" Width="140" HorizontalAlignment="Left" Margin="0,2,0,10" />
+                    <mah:ToggleSwitch Header="Enable built-in HTTP challenge server" IsOn="{Binding EnableHttpChallengeServer}" />
+                    <TextBlock Text="HTTP challenge server prefix (http.sys URL)" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <TextBox Text="{Binding HttpChallengeServerPrefix}" Margin="0,2,0,10" />
+                    <TextBlock Text="Certificate store folder" FontWeight="SemiBold" />
+                    <TextBox Text="{Binding CertificateStorePath}" Margin="0,2,0,10" />
+                    <Button Content="Save Preferences" Command="{Binding DataContext.SavePreferencesCommand, RelativeSource={RelativeSource AncestorType=Window}}" Style="{DynamicResource MahApps.Styles.Button.Square.Accent}" HorizontalAlignment="Left" Padding="14,6" />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</mah:MetroWindow>

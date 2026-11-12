@@ -1,0 +1,113 @@
+﻿@page "/"
+@inject HubClient Hub
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard - CertMaster</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Dashboard</MudText>
+    <MudSpacer />
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" Disabled="_loading" />
+</MudStack>
+
+@if (_loading && _summary == null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (_error != null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_summary != null)
+{
+    <MudGrid Class="mb-4">
+        @Tile("Instances", $"{_summary.InstancesConnected} / {_summary.Instances}", "connected", Icons.Material.Filled.Dns, Color.Primary)
+        @Tile("Certificates", _summary.Certificates.Total.ToString(), "managed", Icons.Material.Filled.Lock, Color.Info)
+        @Tile("Healthy", _summary.Certificates.Healthy.ToString(), "OK", Icons.Material.Filled.CheckCircle, Color.Success)
+        @Tile("Attention", (_summary.Certificates.Error + _summary.Certificates.Warning).ToString(), "errors or warnings", Icons.Material.Filled.Warning, Color.Warning)
+        @Tile("Expiring", _summary.Certificates.ExpiringSoon.ToString(), "within 14 days", Icons.Material.Filled.Schedule, Color.Error)
+        @Tile("Not requested", _summary.Certificates.AwaitingUser.ToString(), "awaiting first request", Icons.Material.Filled.HourglassEmpty, Color.Default)
+    </MudGrid>
+
+    @if (_summary.Instances == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            No instances have joined yet. Go to <MudLink Href="/instances">Instances</MudLink> to create a joining key, then join each server's CertMaster Agent to this hub.
+        </MudAlert>
+    }
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Needs attention</MudText>
+                <MudSimpleTable Dense="true" Hover="true">
+                    <tbody>
+                        @foreach (var i in _summary.AttentionItems)
+                        {
+                            <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/certificates/{i.InstanceId}/{i.Id}"))">
+                                <td>@i.Name</td><td>@i.InstanceTitle</td><td><HealthChip Health="i.Health" /></td>
+                                <td><MudText Typo="Typo.caption">@i.RenewalFailureMessage</MudText></td>
+                            </tr>
+                        }
+                        @if (_summary.AttentionItems.Count == 0)
+                        {
+                            <tr><td><MudText Color="Color.Success">Nothing needs attention.</MudText></td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-2">Upcoming expiry</MudText>
+                <MudSimpleTable Dense="true" Hover="true">
+                    <tbody>
+                        @foreach (var i in _summary.UpcomingRenewals)
+                        {
+                            <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/certificates/{i.InstanceId}/{i.Id}"))">
+                                <td>@i.Name</td><td>@i.InstanceTitle</td>
+                                <td>@i.DateExpiry?.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                                <td>@DaysLeft(i)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private HubSummary? _summary;
+    private bool _loading;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        _loading = true; _error = null;
+        try { _summary = await Hub.GetSummaryAsync(); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private static string DaysLeft(ManagedCertificate i) =>
+        i.DateExpiry == null ? "" : $"{Math.Floor((i.DateExpiry.Value - DateTimeOffset.UtcNow).TotalDays)} days";
+
+    private RenderFragment Tile(string title, string value, string caption, string icon, Color color) => __builder =>
+    {
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption">@title</MudText>
+                        <MudText Typo="Typo.h5">@value</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@caption</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    };
+}

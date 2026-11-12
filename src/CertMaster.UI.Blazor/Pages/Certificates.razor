@@ -1,0 +1,86 @@
+@page "/certificates"
+@inject HubClient Hub
+@inject HubSession Session
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Certificates - CertMaster</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Certificates</MudText>
+    <MudSpacer />
+    @if (Session.CanManage)
+    {
+        <InstanceSelector @bind-Value="_newInstance" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Disabled="_newInstance == null"
+                   OnClick="@(() => Nav.NavigateTo($"/certificates/{_newInstance}/new"))">New certificate</MudButton>
+    }
+</MudStack>
+
+<MudTable T="ManagedCertificate" Items="_items" Hover="true" Dense="true" Loading="_loading" Filter="Matches"
+          OnRowClick="@(e => Nav.NavigateTo($"/certificates/{e.Item!.InstanceId}/{e.Item.Id}"))" RowStyle="cursor:pointer">
+    <ToolBarContent>
+        <MudTextField @bind-Value="_search" Placeholder="Search name or domain" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" />
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" />
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel T="ManagedCertificate" SortBy="x => x.Name">Name</MudTableSortLabel></MudTh>
+        <MudTh>Instance</MudTh>
+        <MudTh>Domains</MudTh>
+        <MudTh><MudTableSortLabel T="ManagedCertificate" SortBy="x => x.DateExpiry ?? DateTimeOffset.MaxValue">Expires</MudTableSortLabel></MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Instance">@context.InstanceTitle</MudTd>
+        <MudTd DataLabel="Domains"><MudText Typo="Typo.body2">@string.Join(", ", context.GetAllDomains().Take(3))@(context.GetAllDomains().Count() > 3 ? " ..." : "")</MudText></MudTd>
+        <MudTd DataLabel="Expires">@(context.DateExpiry?.ToLocalTime().ToString("yyyy-MM-dd") ?? "-")</MudTd>
+        <MudTd DataLabel="Status"><HealthChip Health="context.Health" /></MudTd>
+        <MudTd>
+            @if (Session.CanManage)
+            {
+                <MudTooltip Text="Request / renew now">
+                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => Renew(context))" />
+                </MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent><MudText>No managed certificates found.</MudText></NoRecordsContent>
+    <PagerContent><MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" /></PagerContent>
+</MudTable>
+
+@code {
+    private List<ManagedCertificate> _items = new();
+    private string? _search, _newInstance;
+    private bool _loading;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = await Hub.GetAllItemsAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private bool Matches(ManagedCertificate i) =>
+        string.IsNullOrWhiteSpace(_search)
+        || i.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || i.GetAllDomains().Any(d => d.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        || (i.InstanceTitle?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private async Task Renew(ManagedCertificate i)
+    {
+        try
+        {
+            var r = await Hub.RequestItemAsync(i.InstanceId!, i.Id);
+            Snackbar.Add(r.Message ?? "Request started", r.IsSuccess ? Severity.Info : Severity.Warning);
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

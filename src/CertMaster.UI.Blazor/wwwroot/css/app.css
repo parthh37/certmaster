@@ -1,0 +1,14 @@
+html, body { font-family: 'Roboto', 'Segoe UI', sans-serif; }
+
+.cm-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 12px; color: #455a64; }
+.cm-loading-title { font-size: 2rem; font-weight: 500; letter-spacing: .5px; }
+.loading-progress-text::after { content: var(--blazor-load-percentage-text, "Loading"); }
+
+.cm-mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: .85rem; }
+.cm-log { max-height: 420px; overflow: auto; background: var(--mud-palette-background-gray); padding: 8px 12px; border-radius: 4px; }
+.cm-log .ERR { color: var(--mud-palette-error); }
+.cm-log .WRN { color: var(--mud-palette-warning); }
+.cm-key { word-break: break-all; }
+
+#blazor-error-ui { background: lightyellow; bottom: 0; box-shadow: 0 -1px 2px rgba(0,0,0,.2); display: none; left: 0; padding: .6rem 1.25rem .7rem 1.25rem; position: fixed; width: 100%; z-index: 2000; }
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }

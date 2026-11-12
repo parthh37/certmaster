@@ -1,0 +1,100 @@
+@page "/admin/users"
+@inject HubClient Hub
+@inject HubSession Session
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Users - CertMaster</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Users &amp; Roles</MudText>
+
+@if (!Session.IsAdmin) { <MudAlert Severity="Severity.Warning">Administrator access required.</MudAlert> return; }
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Username</th><th>Email</th><th>Roles</th><th>Enabled</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var u in _users)
+                    {
+                        <tr>
+                            <td>@u.Username</td><td>@u.Email</td><td>@string.Join(", ", u.Roles)</td><td>@(u.IsEnabled ? "Yes" : "No")</td>
+                            <td>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(u))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(u))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudText Typo="Typo.caption" Class="mt-3 d-block">
+                <b>Administrator</b>: everything, including users and joining keys. <b>CertificateManager</b>: create, edit, request and deploy certificates. <b>Viewer</b>: read only.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudText Typo="Typo.h6" Class="mb-2">@(_isNew ? "Add user" : "Edit user")</MudText>
+            <MudTextField @bind-Value="_edit.Username" Label="Username" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_edit.Email" Label="Email" Variant="Variant.Outlined" Class="mb-3" />
+            <MudTextField @bind-Value="_edit.Password" Label="@(_isNew ? "Password (min 10 chars)" : "New password (blank = unchanged)")" InputType="InputType.Password" Variant="Variant.Outlined" Class="mb-3" />
+            <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_roles" Variant="Variant.Outlined" Class="mb-3">
+                @foreach (var r in HubRoles.All) { <MudSelectItem T="string" Value="@r">@r</MudSelectItem> }
+            </MudSelect>
+            <MudSwitch T="bool" @bind-Value="_edit.IsEnabled" Label="Enabled" Color="Color.Primary" />
+            <MudStack Row="true" Class="mt-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+                <MudButton OnClick="New">Clear</MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<HubUser> _users = new();
+    private HubUser _edit = new();
+    private IReadOnlyCollection<string> _roles = new[] { HubRoles.Viewer };
+    private bool _isNew = true;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        try { _users = await Hub.GetUsersAsync(); }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private void New() { _edit = new HubUser(); _roles = new[] { HubRoles.Viewer }; _isNew = true; }
+
+    private void Edit(HubUser u)
+    {
+        _edit = new HubUser { Id = u.Id, Username = u.Username, Email = u.Email, Description = u.Description, IsEnabled = u.IsEnabled };
+        _roles = u.Roles.ToList().AsReadOnly();
+        _isNew = false;
+    }
+
+    private async Task Save()
+    {
+        _edit.Roles = _roles.ToList();
+        try
+        {
+            var r = await Hub.SaveUserAsync(_edit);
+            Snackbar.Add(r.Message ?? "", r.IsSuccess ? Severity.Success : Severity.Error);
+            if (r.IsSuccess) { New(); await Load(); }
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+
+    private async Task Delete(HubUser u)
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Delete user", $"Delete user '{u.Username}'?", yesText: "Delete", cancelText: "Cancel") != true) return;
+        try
+        {
+            var r = await Hub.DeleteUserAsync(u.Id);
+            Snackbar.Add(r.Message ?? "", r.IsSuccess ? Severity.Success : Severity.Error);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(ex.Message, Severity.Error); }
+    }
+}

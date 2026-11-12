@@ -1,0 +1,32 @@
+@inject HubClient Hub
+
+<MudSelect T="string" Label="Instance" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:280px"
+           Value="Value" ValueChanged="OnChanged" ToStringFunc="Display">
+    @foreach (var i in _instances)
+    {
+        <MudSelectItem T="string" Value="@i.InstanceId" Disabled="!i.IsConnected">
+            @i.Title @(i.IsConnected ? "" : "(offline)")
+        </MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    private List<ManagedInstanceInfo> _instances = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _instances = await Hub.GetInstancesAsync(); } catch { _instances = new(); }
+        if (Value == null && _instances.FirstOrDefault(i => i.IsConnected) is { } first)
+            await OnChanged(first.InstanceId);
+    }
+
+    private string Display(string? id) => _instances.FirstOrDefault(i => i.InstanceId == id)?.Title ?? id ?? "";
+
+    private async Task OnChanged(string? v)
+    {
+        Value = v;
+        await ValueChanged.InvokeAsync(v);
+    }
+}

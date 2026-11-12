@@ -1,0 +1,14 @@
+bin/
+obj/
+dist/
+.vs/
+*.user
+*.suo
+# never commit installer payloads or local data
+*.exe
+*.db
+*.key
+# local-only research notes and data
+.local/
+.data/
+TestResults/
