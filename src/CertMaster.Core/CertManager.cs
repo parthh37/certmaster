@@ -180,6 +180,8 @@ public partial class CertManager
     /// <summary>Number of certificate requests running now (an update install waits until this is zero).</summary>
     public int RunningRequestCount => _running.Count;
 
+    public int RequestsInProgressCount => _running.Count;
+
     // ---------- Challenge selection helpers ----------
 
     public static CertRequestChallengeConfig SelectChallengeConfig(ManagedCertificate item, string domain)

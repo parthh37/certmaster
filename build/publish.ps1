@@ -1,5 +1,5 @@
 # Builds release artifacts:
-#   dist/agent/Service, dist/agent/UI.Desktop, dist/hub/Service   (self-contained win-x64)
+#   dist/agent/Service, dist/agent/UI.Desktop (desktop app + tray monitor), dist/hub/Service   (self-contained win-x64)
 #   dist/installers/certmaster-windows-x64-<ver>.exe, certmaster-hub-windows-x64-<ver>.exe  (if Inno Setup is installed)
 param(
     [string]$Configuration = "Release",
@@ -28,6 +28,8 @@ function Publish($project, $out) {
 
 Publish "CertMaster.Server.Core" "agent/Service"
 Publish "CertMaster.UI.Desktop"  "agent/UI.Desktop"
+# The tray monitor goes next to the desktop app and shares its self-contained runtime (one copy in the installer).
+Publish "CertMaster.UI.Tray"     "agent/UI.Desktop"
 Publish "CertMaster.Server.Hub"  "hub/Service"
 
 if ($SkipInstallers) { return }

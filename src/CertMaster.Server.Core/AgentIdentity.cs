@@ -70,6 +70,16 @@ public class AgentIdentity
         return key;
     }
 
+    /// <summary>
+    /// API paths that need no key: the health check, and the read-only status summary when the caller is on this machine
+    /// (the tray monitor runs unelevated and can't read the key file). The agent listens on loopback by default; if
+    /// Agent:Url opens it to the network, remote callers still need the key for the summary.
+    /// </summary>
+    public static bool AllowsAnonymous(PathString path, System.Net.IPAddress? remote) =>
+        path.StartsWithSegments("/api/system/health")
+        || (path.StartsWithSegments("/api/system/summary") && remote != null
+            && System.Net.IPAddress.IsLoopback(remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4() : remote));
+
     public bool IsValidKey(string? candidate) =>
         candidate != null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(candidate), Encoding.UTF8.GetBytes(ApiKey));
 

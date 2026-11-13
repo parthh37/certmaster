@@ -17,6 +17,9 @@ public static class AgentApi
         // ---- system ----
         api.MapGet("/system/health", () => Results.Ok(new { status = "ok" }));
         api.MapGet("/system/version", (AgentIdentity id) => id.GetVersion());
+        // Read-only health snapshot for the tray monitor; loopback callers need no API key (AgentIdentity.AllowsAnonymous).
+        api.MapGet("/system/summary", async (CertManager m, AgentIdentity id) =>
+            AgentStatusSummary.From(await m.GetManagedCertificatesAsync(), id.Version, m.RequestsInProgressCount, DateTimeOffset.UtcNow));
         api.MapGet("/system/log", (CertManager m, int? lines) =>
         {
             var dir = m.Paths.Logs;

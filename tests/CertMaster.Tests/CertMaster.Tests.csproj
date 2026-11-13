@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\CertMaster.Core\CertMaster.Core.csproj" />
     <ProjectReference Include="..\..\src\CertMaster.Server.Core\CertMaster.Server.Core.csproj" />
+    <ProjectReference Include="..\..\src\CertMaster.Client\CertMaster.Client.csproj" />
   </ItemGroup>
 
 </Project>

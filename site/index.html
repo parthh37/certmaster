@@ -284,6 +284,7 @@
       <article class="feat"><h3>Locked-down data</h3><p>The data folder is restricted to SYSTEM and Administrators.</p></article>
       <article class="feat"><h3>Automatic updates</h3><p>The agent and hub check GitHub Releases daily. They can install new versions themselves inside a maintenance window, after checking the installer's SHA-256. You can also update every agent from the hub at once.</p></article>
       <article class="feat"><h3>Self-healing</h3><p>Daily database backups, an integrity check at startup, crash-safe settings files and service crash recovery.</p></article>
+      <article class="feat"><h3>Runs unattended</h3><p>Windows services start at boot with no one signed in. A tray monitor shows status at a glance and notifies you when a renewal fails or a service stops.</p></article>
       <article class="feat"><h3>Safe edits</h3><p>Certificates with a request in progress are protected from conflicting edits, and task problems show as warnings before you run.</p></article>
       <article class="feat"><h3>Clear errors</h3><p>Missing ACME accounts and wrapped CA failures are reported in plain language, with the underlying ACME problem kept in the log.</p></article>
       <article class="feat"><h3>Tested</h3><p>Hundreds of unit tests run in CI on every change, plus end-to-end issuance against Pebble, Let's Encrypt's test CA.</p></article>
@@ -300,7 +301,7 @@
         <table class="dl">
           <thead><tr><th>Installer</th><th>Installs</th></tr></thead>
           <tbody>
-            <tr><td><code>certmaster-windows-x64-&lt;version&gt;.exe</code></td><td>The CertMaster Agent service and the desktop app (optional). The desktop app runs as Administrator.</td></tr>
+            <tr><td><code>certmaster-windows-x64-&lt;version&gt;.exe</code></td><td>The CertMaster Agent service, plus the desktop app and tray monitor (optional). The desktop app runs as Administrator.</td></tr>
             <tr><td><code>certmaster-hub-windows-x64-&lt;version&gt;.exe</code></td><td>The Management Hub service. Setup asks for the port (default 9697) and can open the firewall.</td></tr>
           </tbody>
         </table>

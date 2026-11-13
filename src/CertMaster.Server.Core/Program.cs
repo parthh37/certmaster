@@ -96,10 +96,11 @@ try
     app.Services.GetRequiredService<CertManager>().ProgressReporter = app.Services.GetRequiredService<SignalRProgressReporter>();
     var identity = app.Services.GetRequiredService<AgentIdentity>();
 
-    // Local API authentication: every /api call needs the per-install API key (header, or access_token for SignalR websockets).
+    // Local API authentication: every /api call needs the per-install API key (header, or access_token for SignalR websockets),
+    // except the health check and the loopback-only status summary that the tray monitor reads.
     app.Use(async (ctx, next) =>
     {
-        if (ctx.Request.Path.StartsWithSegments("/api") && !ctx.Request.Path.StartsWithSegments("/api/system/health"))
+        if (ctx.Request.Path.StartsWithSegments("/api") && !AgentIdentity.AllowsAnonymous(ctx.Request.Path, ctx.Connection.RemoteIpAddress))
         {
             var key = ctx.Request.Headers[AgentIdentity.ApiKeyHeader].FirstOrDefault() ?? ctx.Request.Query["access_token"].FirstOrDefault();
             if (!identity.IsValidKey(key)) { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return; }
