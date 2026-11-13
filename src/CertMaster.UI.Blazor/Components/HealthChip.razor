@@ -1,4 +1,4 @@
-<MudChip T="string" Size="Size.Small" Color="@ColorFor" Variant="Variant.Filled" Text="@Label" />
+<MudChip T="string" Size="Size.Small" Color="@ColorFor" Variant="Variant.Text" Icon="@IconFor" Text="@Label" />
 
 @code {
     [Parameter] public ManagedCertificateHealth Health { get; set; }
@@ -9,6 +9,14 @@
         ManagedCertificateHealth.Warning => Color.Warning,
         ManagedCertificateHealth.Error => Color.Error,
         _ => Color.Default,
+    };
+
+    private string IconFor => Health switch
+    {
+        ManagedCertificateHealth.OK => Icons.Material.Outlined.CheckCircle,
+        ManagedCertificateHealth.Warning => Icons.Material.Outlined.Warning,
+        ManagedCertificateHealth.Error => Icons.Material.Outlined.ErrorOutline,
+        _ => Icons.Material.Outlined.Schedule,
     };
 
     private string Label => Health switch

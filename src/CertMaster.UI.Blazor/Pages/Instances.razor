@@ -10,7 +10,7 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
     <MudText Typo="Typo.h4">Managed Instances</MudText>
     <MudSpacer />
-    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" />
+    <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="Load" />
 </MudStack>
 
 <MudTable T="ManagedInstanceInfo" Items="_instances" Dense="true" Hover="true" Loading="_loading" Class="mb-6">
@@ -32,11 +32,11 @@
         <MudTd>
             @if (context.IsConnected && Session.CanManage)
             {
-                <MudTooltip Text="Renew due certificates now"><MudIconButton Icon="@Icons.Material.Filled.Autorenew" Size="Size.Small" OnClick="@(() => RenewAll(context))" /></MudTooltip>
+                <MudTooltip Text="Renew due certificates now"><MudIconButton Icon="@Icons.Material.Outlined.Autorenew" Size="Size.Small" OnClick="@(() => RenewAll(context))" /></MudTooltip>
             }
             @if (Session.IsAdmin)
             {
-                <MudTooltip Text="Remove instance"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(context))" /></MudTooltip>
+                <MudTooltip Text="Remove instance"><MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(context))" /></MudTooltip>
             }
         </MudTd>
     </RowTemplate>
@@ -60,7 +60,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
             <MudTextField @bind-Value="_keyTitle" Label="Title" Variant="Variant.Outlined" Margin="Margin.Dense" />
             <MudNumericField T="int?" @bind-Value="_keyExpiry" Label="Expires in (days, blank = never)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" />
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Key" OnClick="CreateKey">Create key</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.Key" OnClick="CreateKey">Create key</MudButton>
         </MudStack>
         <MudSimpleTable Dense="true">
             <thead><tr><th>Title</th><th>Created</th><th>Expires</th><th>Status</th><th></th></tr></thead>

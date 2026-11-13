@@ -12,7 +12,7 @@
     @if (Session.CanManage)
     {
         <InstanceSelector @bind-Value="_newInstance" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Disabled="_newInstance == null"
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.Add" Disabled="_newInstance == null"
                    OnClick="@(() => Nav.NavigateTo($"/certificates/{_newInstance}/new"))">New certificate</MudButton>
     }
 </MudStack>
@@ -21,9 +21,9 @@
           OnRowClick="@(e => Nav.NavigateTo($"/certificates/{e.Item!.InstanceId}/{e.Item.Id}"))" RowStyle="cursor:pointer">
     <ToolBarContent>
         <MudTextField @bind-Value="_search" Placeholder="Search name or domain" Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" />
+                      AdornmentIcon="@Icons.Material.Outlined.Search" Immediate="true" Clearable="true" />
         <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" />
+        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="Load" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel T="ManagedCertificate" SortBy="x => x.Name">Name</MudTableSortLabel></MudTh>
@@ -43,7 +43,7 @@
             @if (Session.CanManage)
             {
                 <MudTooltip Text="Request / renew now">
-                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Primary"
+                    <MudIconButton Icon="@Icons.Material.Outlined.PlayArrow" Size="Size.Small" Color="Color.Primary"
                                    OnClick="@(() => Renew(context))" />
                 </MudTooltip>
             }

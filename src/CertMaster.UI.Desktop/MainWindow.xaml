@@ -3,172 +3,296 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
                  xmlns:views="clr-namespace:CertMaster.UI.Desktop.Views"
+                 Style="{StaticResource Cm.Window}"
                  Title="{Binding Version, StringFormat={}{0} - Certificate Manager}" Height="840" Width="1320" MinWidth="1020" MinHeight="620"
-                 Icon="pack://application:,,,/certmaster.ico" WindowStartupLocation="CenterScreen" GlowBrush="{DynamicResource MahApps.Brushes.Accent}" TitleCharacterCasing="Normal">
+                 Icon="pack://application:,,,/certmaster.ico" WindowStartupLocation="CenterScreen">
 
-    <DockPanel>
-        <!-- Status bar -->
-        <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem Content="{Binding StatusText}" />
-            <StatusBarItem HorizontalAlignment="Right">
-                <TextBlock><Run Text="{Binding AgentVersion, Mode=OneWay}" /><Run Text="  |  Agent: " /><Run Text="{Binding ConnectionState, Mode=OneWay}" /></TextBlock>
-            </StatusBarItem>
-        </StatusBar>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="232" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <!-- Main toolbar -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="10,10,10,4">
-            <Button Style="{StaticResource ToolButton}" Command="{Binding NewCommand}" Padding="12,6">
-                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE710;" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,2,8,0" FontSize="15" /><TextBlock Text="New Certificate" /></StackPanel>
-            </Button>
-            <Button Style="{StaticResource ToolButton}" Command="{Binding RenewAllCommand}" Padding="12,6">
-                <StackPanel Orientation="Horizontal"><TextBlock FontFamily="{StaticResource Icons}" Text="&#xE895;" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,2,8,0" FontSize="15" /><TextBlock Text="Renew All" /></StackPanel>
-            </Button>
-            <mah:ProgressRing IsActive="{Binding IsBusy}" Width="22" Height="22" Margin="12,0" />
-        </StackPanel>
-
-        <!-- Update available banner -->
-        <Border DockPanel.Dock="Top" Margin="10,0,10,6" Padding="12,6" CornerRadius="3" DataContext="{Binding Updates}"
-                Background="{DynamicResource MahApps.Brushes.Accent4}" BorderBrush="{DynamicResource MahApps.Brushes.Accent}" BorderThickness="1"
-                Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="Install Now" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}" />
-                    <Button Content="Release Notes" Style="{StaticResource ToolButton}" Command="{Binding OpenReleaseNotesCommand}" />
+        <!-- ===== Navigation pane ===== -->
+        <ListBox Style="{StaticResource Cm.ListBox}" ItemContainerStyle="{StaticResource Cm.NavItem}" SelectedIndex="{Binding SelectedTab}"
+                 Margin="6,0,6,8" ScrollViewer.VerticalScrollBarVisibility="Disabled" AutomationProperties.Name="Navigation">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate><DockPanel LastChildFill="False" /></ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBoxItem DockPanel.Dock="Top" AutomationProperties.Name="Certificates">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xEB95;" Margin="0,0,14,0" />
+                    <TextBlock Text="Certificates" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock FontFamily="{StaticResource Icons}" Text="&#xE896;" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,2,8,0" FontSize="15" />
-                    <TextBlock Text="{Binding BannerText}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                    <mah:ProgressRing IsActive="{Binding IsWorking}" Width="16" Height="16" Margin="10,0" />
+            </ListBoxItem>
+            <ListBoxItem DockPanel.Dock="Top" AutomationProperties.Name="In progress">
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" Background="{DynamicResource Cm.AccentFill}" CornerRadius="8" MinWidth="16" Height="16" Padding="5,0" VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers><DataTrigger Binding="{Binding RunningCount}" Value="0"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding RunningCount}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Cm.TextOnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE823;" Margin="0,0,14,0" />
+                        <TextBlock Text="In progress" />
+                    </StackPanel>
+                </DockPanel>
+            </ListBoxItem>
+            <!-- Bottom-docked items: the first one docked sits lowest. -->
+            <ListBoxItem DockPanel.Dock="Bottom" AutomationProperties.Name="Settings">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE713;" Margin="0,0,14,0" />
+                    <TextBlock Text="Settings" />
                 </StackPanel>
-            </DockPanel>
-        </Border>
+            </ListBoxItem>
+            <ListBoxItem DockPanel.Dock="Bottom" AutomationProperties.Name="About">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE946;" Margin="0,0,14,0" />
+                    <TextBlock Text="About" />
+                </StackPanel>
+            </ListBoxItem>
+        </ListBox>
 
-        <TabControl SelectedIndex="{Binding SelectedTab}" Margin="10,0,10,6" mah:HeaderedControlHelper.HeaderFontSize="14" mah:TabControlHelper.Underlined="SelectedTabItem">
-            <!-- ===== Managed Certificates ===== -->
-            <TabItem Header="Managed Certificates">
-                <Grid Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="300" MinWidth="220" />
-                        <ColumnDefinition Width="6" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+        <!-- ===== Content layer ===== -->
+        <Border Grid.Column="1" Background="{DynamicResource Cm.LayerBackground}" BorderBrush="{DynamicResource Cm.LayerStroke}" BorderThickness="1,1,0,0" CornerRadius="8,0,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Update available (InfoBar) -->
+                <Border Style="{StaticResource Cm.InfoBar}" Margin="24,16,24,0" DataContext="{Binding Updates}"
+                        Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}">
                     <DockPanel>
-                        <TextBox DockPanel.Dock="Top" Margin="0,0,0,6" mah:TextBoxHelper.Watermark="Filter..." mah:TextBoxHelper.ClearTextButton="True"
-                                 Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=300}" />
-                        <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" BorderThickness="1" BorderBrush="{DynamicResource MahApps.Brushes.Gray8}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="2,4">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="6" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                                        <Rectangle Fill="{Binding Health, Converter={StaticResource HealthBrush}}" Margin="0,0,6,0" />
-                                        <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Foreground="Gray" FontSize="11">
-                                                <Run Text="{Binding Health, Converter={StaticResource HealthText}, Mode=OneWay}" />
-                                                <Run Text="  ·  expires " /><Run Text="{Binding DateExpiry, StringFormat=d, TargetNullValue=-, Mode=OneWay}" />
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <mah:ProgressRing IsActive="{Binding IsWorking}" Width="16" Height="16" Margin="0,0,12,0" Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}" />
+                            <Button Content="Release notes" Style="{StaticResource SubtleButton}" Command="{Binding OpenReleaseNotesCommand}" Margin="0,0,8,0" />
+                            <Button Content="Install now" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE896;" Foreground="{DynamicResource Cm.AccentText}" Margin="0,0,12,0" />
+                        <TextBlock Text="{Binding BannerText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    </DockPanel>
+                </Border>
+
+                <TabControl Grid.Row="1" Style="{StaticResource Cm.PageHost}" SelectedIndex="{Binding SelectedTab}">
+                    <!-- ===== Certificates ===== -->
+                    <TabItem>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="320" MinWidth="240" MaxWidth="520" />
+                                <ColumnDefinition Width="1" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- List pane -->
+                            <DockPanel Margin="16,20,12,12">
+                                <TextBlock DockPanel.Dock="Top" Text="Certificates" Style="{StaticResource Cm.Subtitle}" Margin="8,0,0,12" />
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,12">
+                                    <Button Style="{StaticResource PrimaryToolButton}" Command="{Binding NewCommand}" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE710;" FontSize="14" /><TextBlock Text="New certificate" /></StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding RenewAllCommand}" ToolTip="Renew every certificate that is due">
+                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE895;" FontSize="14" /><TextBlock Text="Renew all" /></StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <TextBox DockPanel.Dock="Top" Margin="8,0,0,8" mah:TextBoxHelper.Watermark="Search certificates" mah:TextBoxHelper.ClearTextButton="{Binding (mah:TextBoxHelper.HasText), RelativeSource={RelativeSource Self}}"
+                                         AutomationProperties.Name="Search certificates" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=300}" />
+                                <TextBlock DockPanel.Dock="Top" Text="No certificates to show." Margin="8,12,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers><DataTrigger Binding="{Binding Items.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ListBox Style="{StaticResource Cm.ListBox}" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Margin="4,0,0,0"
+                                         AutomationProperties.Name="Managed certificates">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                <Ellipse Style="{StaticResource Cm.HealthDot}" VerticalAlignment="Top" Margin="0,6,12,0" />
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Style="{StaticResource Cm.Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,1,0,0">
+                                                        <Run Text="{Binding Health, Converter={StaticResource HealthText}, Mode=OneWay}" /><Run Text="  ·  Expires " /><Run Text="{Binding DateExpiry, StringFormat=d, TargetNullValue=-, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+
+                            <Rectangle Grid.Column="1" Fill="{DynamicResource Cm.Divider}" />
+                            <GridSplitter Grid.Column="1" Width="7" Margin="-3,0" HorizontalAlignment="Center" Background="Transparent" />
+
+                            <!-- Detail pane -->
+                            <Grid Grid.Column="2">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers><DataTrigger Binding="{Binding Editor}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Border Width="72" Height="72" CornerRadius="36" Background="{DynamicResource Cm.AccentSubtle}" HorizontalAlignment="Center">
+                                        <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xEB95;" FontSize="32" Foreground="{DynamicResource Cm.AccentText}" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="No certificate selected" Style="{StaticResource Cm.Subtitle}" HorizontalAlignment="Center" Margin="0,20,0,6" />
+                                    <TextBlock Text="Select a managed certificate from the list, or create a new one to request a certificate from Let's Encrypt or another ACME CA."
+                                               Style="{StaticResource Hint}" TextAlignment="Center" Margin="0,0,0,20" />
+                                    <Button Style="{StaticResource PrimaryToolButton}" Command="{Binding NewCommand}" HorizontalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE710;" FontSize="14" /><TextBlock Text="New certificate" /></StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <views:CertificateEditorView DataContext="{Binding Editor}">
+                                    <views:CertificateEditorView.Style>
+                                        <Style TargetType="views:CertificateEditorView">
+                                            <Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
+                                        </Style>
+                                    </views:CertificateEditorView.Style>
+                                </views:CertificateEditorView>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- ===== In progress ===== -->
+                    <TabItem>
+                        <DockPanel Margin="24,20,24,0">
+                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                                <Button DockPanel.Dock="Right" Command="{Binding ClearFinishedCommand}" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE894;" FontSize="14" /><TextBlock Text="Clear finished" /></StackPanel>
+                                </Button>
+                                <TextBlock Text="In progress" Style="{StaticResource Cm.Title}" />
+                            </DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Certificate requests running now or completed during this session." Style="{StaticResource Hint}" Margin="0,0,0,16" />
+                            <Grid>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,80">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers><DataTrigger Binding="{Binding InProgress.Count}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE823;" FontSize="40" Foreground="{DynamicResource Cm.TextTertiary}" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Nothing in progress" Style="{StaticResource Cm.BodyStrong}" HorizontalAlignment="Center" Margin="0,14,0,4" />
+                                    <TextBlock Text="Requests and renewals you start appear here." Style="{StaticResource Hint}" HorizontalAlignment="Center" />
+                                </StackPanel>
+                                <ItemsControl ItemsSource="{Binding InProgress}">
+                                    <ItemsControl.Template>
+                                        <ControlTemplate><ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,12"><ItemsPresenter /></ScrollViewer></ControlTemplate>
+                                    </ItemsControl.Template>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <Border DockPanel.Dock="Right" Style="{StaticResource Cm.StateBadge}" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding State}" FontSize="12" FontWeight="SemiBold" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Cm.BodyStrong}" FontSize="16" TextTrimming="CharacterEllipsis" />
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{DynamicResource Cm.TextSecondary}" Margin="0,4,0,0" />
+                                                    <mah:MetroProgressBar IsIndeterminate="True" Height="3" Margin="0,12,0,2">
+                                                        <mah:MetroProgressBar.Style>
+                                                            <Style TargetType="mah:MetroProgressBar" BasedOn="{StaticResource {x:Type mah:MetroProgressBar}}">
+                                                                <Style.Triggers><DataTrigger Binding="{Binding IsFinal}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
+                                                            </Style>
+                                                        </mah:MetroProgressBar.Style>
+                                                    </mah:MetroProgressBar>
+                                                    <Expander Header="Details" Margin="0,6,0,0">
+                                                        <Border Background="{DynamicResource Cm.CardBackgroundSecondary}" CornerRadius="4" Padding="12,8">
+                                                            <ItemsControl ItemsSource="{Binding Messages}" FontFamily="{StaticResource Cm.FontMono}" FontSize="12" />
+                                                        </Border>
+                                                    </Expander>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <!-- ===== Settings ===== -->
+                    <TabItem>
+                        <views:SettingsView DataContext="{Binding Settings}" Margin="24,20,24,0" />
+                    </TabItem>
+
+                    <!-- ===== About ===== -->
+                    <TabItem>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="24,20,24,24" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Text="About" Style="{StaticResource Cm.Title}" Margin="0,0,0,20" />
+                                <Border Style="{StaticResource Card}">
+                                    <DockPanel>
+                                        <Image DockPanel.Dock="Left" Source="pack://application:,,,/certmaster.ico" Width="48" Height="48" Margin="0,0,16,0" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <StackPanel>
+                                            <TextBlock Text="CertMaster" Style="{StaticResource Cm.Subtitle}" />
+                                            <TextBlock Text="{Binding AppVersion, StringFormat=Version {0}}" Foreground="{DynamicResource Cm.TextSecondary}" Margin="0,2,0,0" />
+                                            <TextBlock Text="{Binding AgentVersion}" Style="{StaticResource Cm.Caption}" />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,12,0,0">
+                                                Open-source ACME certificate manager for Windows: requests, renews and deploys TLS certificates from Let's Encrypt and other
+                                                ACME certificate authorities, with automatic IIS binding, dozens of DNS providers and deployment tasks, and optional central
+                                                management through the CertMaster Management Hub.
+                                            </TextBlock>
+                                            <TextBlock Margin="0,12,0,0">
+                                                <Hyperlink NavigateUri="https://github.com/parthh37/certmaster" RequestNavigate="OnNavigate">github.com/parthh37/certmaster</Hyperlink>
                                             </TextBlock>
                                         </StackPanel>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </DockPanel>
-
-                    <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent" />
-
-                    <Grid Grid.Column="2" Margin="10,0,0,0">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers><DataTrigger Binding="{Binding Editor}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            <TextBlock FontFamily="{StaticResource Icons}" Text="&#xEB95;" FontSize="48" HorizontalAlignment="Center" Foreground="{DynamicResource MahApps.Brushes.Gray7}" />
-                            <TextBlock Text="Select a managed certificate, or click New Certificate to get started." Foreground="Gray" FontSize="15" Margin="0,10,0,0" />
-                        </StackPanel>
-                        <views:CertificateEditorView DataContext="{Binding Editor}">
-                            <views:CertificateEditorView.Style>
-                                <Style TargetType="views:CertificateEditorView">
-                                    <Style.Triggers><DataTrigger Binding="{Binding}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
-                                </Style>
-                            </views:CertificateEditorView.Style>
-                        </views:CertificateEditorView>
-                    </Grid>
-                </Grid>
-            </TabItem>
-
-            <!-- ===== In Progress ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <TextBlock><Run Text="In Progress" /><Run Text="{Binding RunningCount, StringFormat={} ({0}), Mode=OneWay}" /></TextBlock>
-                </TabItem.Header>
-                <DockPanel Margin="0,8,0,0">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Certificate requests running now or completed during this session." Style="{StaticResource Hint}" Margin="0,4,12,0" />
-                        <Button Content="Clear finished" Style="{StaticResource ToolButton}" Command="{Binding ClearFinishedCommand}" />
-                    </StackPanel>
-                    <ItemsControl ItemsSource="{Binding InProgress}">
-                        <ItemsControl.Template>
-                            <ControlTemplate><ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer></ControlTemplate>
-                        </ItemsControl.Template>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource Card}" BorderThickness="4,1,1,1" BorderBrush="{Binding State, Converter={StaticResource StateBrush}}">
+                                    </DockPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
                                     <StackPanel>
-                                        <DockPanel>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding State}" Foreground="{Binding State, Converter={StaticResource StateBrush}}" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
-                                        </DockPanel>
-                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="0,2,0,4" />
-                                        <mah:MetroProgressBar IsIndeterminate="True" Height="4">
-                                            <mah:MetroProgressBar.Style>
-                                                <Style TargetType="mah:MetroProgressBar">
-                                                    <Style.Triggers><DataTrigger Binding="{Binding IsFinal}" Value="True"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers>
-                                                </Style>
-                                            </mah:MetroProgressBar.Style>
-                                        </mah:MetroProgressBar>
-                                        <Expander Header="Details" Margin="0,4,0,0">
-                                            <ItemsControl ItemsSource="{Binding Messages}" FontFamily="Consolas" />
-                                        </Expander>
+                                        <TextBlock Text="License" Style="{StaticResource GroupTitle}" />
+                                        <TextBlock Text="MIT License. Free for personal and commercial use; no license key or evaluation limits." TextWrapping="Wrap" Foreground="{DynamicResource Cm.TextSecondary}" />
                                     </StackPanel>
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </DockPanel>
-            </TabItem>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="Third-party components" Style="{StaticResource GroupTitle}" />
+                                        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Cm.TextSecondary}">
+                                            Certes (MIT), BouncyCastle (MIT), MahApps.Metro (MIT), CommunityToolkit.Mvvm (MIT), MudBlazor (MIT), Serilog (Apache-2.0),
+                                            SSH.NET (MIT), DnsClient (Apache-2.0), AWS SDK for .NET (Apache-2.0), Azure SDK for .NET (MIT), Posh-ACME (MIT), Microsoft .NET (MIT).
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
 
-            <!-- ===== Settings ===== -->
-            <TabItem Header="Settings">
-                <views:SettingsView DataContext="{Binding Settings}" Margin="0,8,0,0" />
-            </TabItem>
+                <!-- Busy indicator along the top edge of the content -->
+                <mah:MetroProgressBar Grid.Row="0" Grid.RowSpan="2" VerticalAlignment="Top" Height="3" Margin="8,0,0,0" IsIndeterminate="True"
+                                      Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
 
-            <!-- ===== About ===== -->
-            <TabItem Header="About">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="10,16" MaxWidth="720" HorizontalAlignment="Left">
-                        <TextBlock Text="CertMaster" FontSize="28" FontWeight="Light" />
-                        <TextBlock Text="{Binding AppVersion, StringFormat=Version {0}}" Margin="0,2,0,0" />
-                        <TextBlock Text="{Binding AgentVersion}" Style="{StaticResource Hint}" />
-                        <TextBlock TextWrapping="Wrap" Margin="0,10">
-                            Open-source ACME certificate manager for Windows: requests, renews and deploys TLS certificates from Let's Encrypt and other
-                            ACME certificate authorities, with automatic IIS binding, dozens of DNS providers and deployment tasks, and optional central
-                            management through the CertMaster Management Hub.
-                        </TextBlock>
-                        <TextBlock Text="License" Style="{StaticResource SectionTitle}" />
-                        <TextBlock Text="MIT License. Free for personal and commercial use; no license key or evaluation limits." TextWrapping="Wrap" />
-                        <TextBlock Text="Third-party components" Style="{StaticResource SectionTitle}" Margin="0,12,0,4" />
-                        <TextBlock TextWrapping="Wrap">
-                            Certes (MIT), BouncyCastle (MIT), MahApps.Metro (MIT), CommunityToolkit.Mvvm (MIT), MudBlazor (MIT), Serilog (Apache-2.0),
-                            SSH.NET (MIT), DnsClient (Apache-2.0), AWS SDK for .NET (Apache-2.0), Azure SDK for .NET (MIT), Posh-ACME (MIT), Microsoft .NET (MIT).
-                        </TextBlock>
-                        <TextBlock Margin="0,12,0,0">
-                            <Hyperlink NavigateUri="https://github.com/parthh37/certmaster" RequestNavigate="OnNavigate">github.com/parthh37/certmaster</Hyperlink>
-                        </TextBlock>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
-    </DockPanel>
+                <!-- Footer: last status message and agent connection -->
+                <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Cm.Divider}" Padding="24,7,20,8">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="16,0,0,0">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{DynamicResource Cm.Caution}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ConnectionState}" Value="Connected"><Setter Property="Fill" Value="{DynamicResource Cm.Success}" /></DataTrigger>
+                                            <DataTrigger Binding="{Binding ConnectionState}" Value="Disconnected"><Setter Property="Fill" Value="{DynamicResource Cm.Critical}" /></DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Style="{StaticResource Cm.Caption}" VerticalAlignment="Center"><Run Text="{Binding ConnectionState, Mode=OneWay}" /><Run Text="   ·   " /><Run Text="{Binding AgentVersion, Mode=OneWay}" /></TextBlock>
+                        </StackPanel>
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Cm.Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
 </mah:MetroWindow>

@@ -1,14 +1,195 @@
-html, body { font-family: 'Roboto', 'Segoe UI', sans-serif; }
+/* CertMaster Management Hub: Windows 11 / Fluent styling on top of MudBlazor. Colors come from the MudBlazor palette
+   (Layout/FluentTheme.cs), so everything here works in light and dark mode. */
 
-.cm-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 12px; color: #455a64; }
-.cm-loading-title { font-size: 2rem; font-weight: 500; letter-spacing: .5px; }
+:root {
+    --cm-font: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+    --cm-radius-control: 4px;
+    --cm-radius-card: 8px;
+    --cm-subtle-hover: color-mix(in srgb, var(--mud-palette-text-primary) 5%, transparent);
+    --cm-subtle-pressed: color-mix(in srgb, var(--mud-palette-text-primary) 3%, transparent);
+    --cm-subtle-selected: color-mix(in srgb, var(--mud-palette-text-primary) 6%, transparent);
+    --cm-card-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+}
+
+html, body {
+    font-family: var(--cm-font);
+    background: var(--mud-palette-appbar-background, #f3f3f3);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Loading screen ---------- */
+.cm-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 14px; color: #616161; background: #f3f3f3; }
+.cm-loading-title { font-size: 1.75rem; font-weight: 600; color: #1b1b1b; }
+.cm-loading-bar { width: 160px; height: 3px; border-radius: 2px; background: #e5e5e5; overflow: hidden; position: relative; }
+.cm-loading-bar::after { content: ""; position: absolute; inset: 0; width: 40%; border-radius: 2px; background: #005fb8; animation: cm-indeterminate 1.4s ease-in-out infinite; }
+.loading-progress-text { font-size: .75rem; }
 .loading-progress-text::after { content: var(--blazor-load-percentage-text, "Loading"); }
+@keyframes cm-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@media (prefers-color-scheme: dark) {
+    .cm-loading { background: #202020; color: #c8c8c8; }
+    .cm-loading-title { color: #fff; }
+    .cm-loading-bar { background: #3a3a3a; }
+    .cm-loading-bar::after { background: #60cdff; }
+}
 
-.cm-mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: .85rem; }
-.cm-log { max-height: 420px; overflow: auto; background: var(--mud-palette-background-gray); padding: 8px 12px; border-radius: 4px; }
+/* ---------- Shell: title bar, navigation pane and the content layer ---------- */
+.cm-shell { background: var(--mud-palette-appbar-background); }
+.cm-appbar.mud-appbar { background: var(--mud-palette-appbar-background); color: var(--mud-palette-appbar-text); box-shadow: none; }
+.cm-appbar .mud-toolbar { gap: 4px; }
+.cm-logo { width: 20px; height: 20px; margin: 0 10px 0 6px; }
+.cm-app-title { font-size: .875rem; font-weight: 600; white-space: nowrap; }
+.cm-app-subtitle { font-weight: 400; color: var(--mud-palette-text-secondary); margin-left: 4px; }
+.cm-avatar.mud-avatar { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); font-size: .8125rem; font-weight: 600; cursor: pointer; }
+@media (max-width: 599.98px) { .cm-app-subtitle { display: none; } }
+
+.cm-drawer.mud-drawer { background: var(--mud-palette-drawer-background); border: none; }
+.cm-main.mud-main-content { background: var(--mud-palette-appbar-background); }
+.cm-layer {
+    background: var(--mud-palette-background);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-right: 0;
+    border-bottom: 0;
+    border-top-left-radius: var(--cm-radius-card);
+    min-height: calc(100vh - var(--mud-appbar-height));
+}
+.cm-page.mud-container { padding-top: 28px; padding-bottom: 40px; padding-left: 32px; padding-right: 32px; }
+@media (max-width: 959.98px) {
+    .cm-layer { border-left: 0; border-top-left-radius: 0; }
+    .cm-page.mud-container { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Navigation items: rounded, subtle selection with an accent pill (Windows 11 NavigationView). */
+.cm-nav { padding: 4px 0; }
+.cm-nav .mud-nav-link {
+    position: relative;
+    margin: 2px 8px;
+    width: calc(100% - 16px);
+    min-height: 36px;
+    padding: 8px 12px;
+    border-radius: var(--cm-radius-control);
+    color: var(--mud-palette-drawer-text);
+    font-weight: 400;
+    transition: background-color .1s ease;
+}
+.cm-nav .mud-nav-link:hover:not(.mud-nav-link-disabled) { background-color: var(--cm-subtle-hover); }
+.cm-nav .mud-nav-link:active:not(.mud-nav-link-disabled) { background-color: var(--cm-subtle-pressed); }
+.cm-nav .mud-nav-link.active:not(.mud-nav-link-disabled) {
+    background-color: var(--cm-subtle-selected) !important;
+    color: var(--mud-palette-drawer-text) !important;
+    font-weight: 400;
+}
+.cm-nav .mud-nav-link.active:not(.mud-nav-link-disabled)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 16px;
+    margin-top: -8px;
+    border-radius: 2px;
+    background: var(--mud-palette-primary);
+}
+.cm-nav .mud-nav-link .mud-nav-link-icon,
+.cm-nav .mud-nav-link.active .mud-nav-link-icon { color: var(--mud-palette-drawer-icon) !important; font-size: 1.25rem; }
+.cm-nav .mud-nav-link .mud-nav-link-text { margin-left: 14px; font-size: .875rem; }
+.cm-nav .mud-nav-group .mud-nav-group > .mud-nav-link,
+.cm-nav .mud-navmenu .mud-nav-group .mud-collapse-container .mud-nav-link { padding-left: 28px; }
+
+/* ---------- Surfaces ---------- */
+.mud-paper.mud-elevation-1,
+.mud-paper.mud-elevation-2,
+.mud-paper.mud-elevation-3,
+.mud-paper-outlined {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--cm-radius-card);
+    box-shadow: var(--cm-card-shadow);
+}
+.mud-card { border-radius: var(--cm-radius-card); }
+.mud-dialog { border-radius: var(--cm-radius-card); border: 1px solid var(--mud-palette-lines-default); }
+.mud-dialog .mud-dialog-actions { background: var(--mud-palette-background); border-top: 1px solid var(--mud-palette-lines-default); padding: 16px 24px; }
+.mud-popover { border-radius: var(--cm-radius-card); border: 1px solid var(--mud-palette-lines-default); }
+.mud-popover .mud-list { padding: 4px; }
+.mud-popover .mud-list-item, .mud-popover .mud-menu-item { border-radius: var(--cm-radius-control); }
+.mud-tooltip { border-radius: var(--cm-radius-control); font-size: .75rem; padding: 6px 9px 8px; }
+
+/* InfoBar-like alerts: tinted fill with a hairline border. */
+.mud-alert { border-radius: var(--cm-radius-control); border: 1px solid var(--mud-palette-lines-default); }
+
+/* ---------- Controls ---------- */
+.mud-button-root.mud-button { letter-spacing: normal; }
+.mud-button-filled { box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .2); }
+.mud-button-filled:hover, .mud-button-filled:focus-visible { box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .2); }
+.mud-button-filled:active { box-shadow: none; opacity: .9; }
+.mud-button-outlined { background: var(--mud-palette-surface); border-color: var(--mud-palette-lines-default); }
+.mud-button-outlined.mud-button-outlined-default { color: var(--mud-palette-text-primary); }
+
+.mud-chip { font-weight: 600; letter-spacing: normal; }
+.mud-chip.mud-chip-size-small { height: 22px; font-size: .75rem; padding: 0 8px; }
+
+/* Text inputs: thin outline with a stronger bottom edge; focus shows an accent underline. */
+.mud-input.mud-input-outlined .mud-input-outlined-border { border-radius: var(--cm-radius-control); }
+.mud-input.mud-input-outlined:not(.mud-disabled):not(.mud-input-error) .mud-input-outlined-border {
+    border-color: var(--mud-palette-lines-default);
+    border-bottom-color: var(--mud-palette-lines-inputs);
+}
+.mud-input.mud-input-outlined:not(.mud-disabled):not(.mud-input-error):hover .mud-input-outlined-border {
+    border-color: var(--mud-palette-lines-default);
+    border-bottom-color: var(--mud-palette-lines-inputs);
+    background-color: var(--cm-subtle-pressed);
+}
+.mud-input.mud-input-outlined.mud-shrink:focus-within:not(.mud-input-error) .mud-input-outlined-border,
+.mud-input.mud-input-outlined:focus-within:not(.mud-input-error) .mud-input-outlined-border {
+    border-width: 1px;
+    border-color: var(--mud-palette-lines-default);
+    border-bottom: 2px solid var(--mud-palette-primary);
+}
+
+/* Tables: quiet headers, hairline rows. */
+.mud-table-head .mud-table-cell,
+.mud-simple-table table thead tr th {
+    color: var(--mud-palette-text-secondary);
+    font-weight: 600;
+    font-size: .75rem;
+}
+.mud-table-container { border-radius: var(--cm-radius-card); }
+
+/* Tabs: Windows SelectorBar look. */
+.mud-tabs-tabbar { background: transparent; }
+.mud-tab { text-transform: none; letter-spacing: normal; font-weight: 400; min-width: 0; padding: 8px 16px; border-radius: var(--cm-radius-control); }
+.mud-tab.mud-tab-active { font-weight: 600; color: var(--mud-palette-text-primary); }
+.mud-tab-slider { height: 3px !important; border-radius: 2px; }
+
+/* ---------- App components ---------- */
+.cm-page-header { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.cm-page-header > .mud-typography-h4 { margin-right: auto; }
+
+.cm-tile { height: 100%; }
+.cm-tile-icon { width: 40px; height: 40px; border-radius: var(--cm-radius-card); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.cm-tint-primary { background: color-mix(in srgb, var(--mud-palette-primary) 14%, transparent); }
+.cm-tint-info { background: color-mix(in srgb, var(--mud-palette-info) 14%, transparent); }
+.cm-tint-success { background: color-mix(in srgb, var(--mud-palette-success) 14%, transparent); }
+.cm-tint-warning { background: color-mix(in srgb, var(--mud-palette-warning) 16%, transparent); }
+.cm-tint-error { background: color-mix(in srgb, var(--mud-palette-error) 14%, transparent); }
+.cm-tint-default { background: var(--cm-subtle-selected); }
+.cm-tile-value { font-family: "Segoe UI Variable Display", var(--cm-font); font-size: 1.75rem; font-weight: 600; line-height: 1.2; margin-top: 2px; }
+
+.cm-login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--mud-palette-background-gray); }
+.cm-login-card { width: 100%; max-width: 420px; padding: 36px 32px 28px; }
+.cm-login-logo { width: 48px; height: 48px; }
+
+.cm-mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: .8125rem; }
+.cm-log { max-height: 420px; overflow: auto; background: var(--mud-palette-background-gray); border: 1px solid var(--mud-palette-lines-default); padding: 8px 12px; border-radius: var(--cm-radius-control); }
 .cm-log .ERR { color: var(--mud-palette-error); }
 .cm-log .WRN { color: var(--mud-palette-warning); }
 .cm-key { word-break: break-all; }
 
-#blazor-error-ui { background: lightyellow; bottom: 0; box-shadow: 0 -1px 2px rgba(0,0,0,.2); display: none; left: 0; padding: .6rem 1.25rem .7rem 1.25rem; position: fixed; width: 100%; z-index: 2000; }
+/* Thin scroll bars */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--mud-palette-text-primary) 35%, transparent) transparent; }
+
+#blazor-error-ui { background: #fff4ce; color: #1b1b1b; bottom: 0; box-shadow: 0 -1px 2px rgba(0,0,0,.2); display: none; left: 0; padding: .6rem 1.25rem .7rem 1.25rem; position: fixed; width: 100%; z-index: 2000; }
 #blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }
+
+/* Tables placed inside a card should not draw a second card. */
+.mud-paper .mud-table,
+.mud-paper .mud-simple-table { border: 0; box-shadow: none; background: transparent; }

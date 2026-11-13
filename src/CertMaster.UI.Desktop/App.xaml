@@ -9,18 +9,16 @@
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Blue.xaml" />
-                <ResourceDictionary Source="Views/ParameterTemplates.xaml" />
                 <ResourceDictionary Source="Views/Styles.xaml" />
+                <ResourceDictionary Source="Views/ParameterTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
             <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
-            <local:HealthToBrushConverter x:Key="HealthBrush" />
             <local:HealthToTextConverter x:Key="HealthText" />
             <local:InverseBoolConverter x:Key="Not" />
             <local:EqualsToVisibilityConverter x:Key="EqVis" />
             <local:EqualsConverter x:Key="Eq" />
             <local:NullToCollapsedConverter x:Key="NullCollapsed" />
-            <local:RequestStateToBrushConverter x:Key="StateBrush" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

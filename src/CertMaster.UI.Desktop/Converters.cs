@@ -1,22 +1,11 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
-using System.Windows.Media;
 using CertMaster.Models;
 
 namespace CertMaster.UI.Desktop;
 
-public class HealthToBrushConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
-    {
-        ManagedCertificateHealth.OK => new SolidColorBrush(Color.FromRgb(0x2E, 0x7D, 0x32)),
-        ManagedCertificateHealth.Warning => new SolidColorBrush(Color.FromRgb(0xEF, 0x6C, 0x00)),
-        ManagedCertificateHealth.Error => new SolidColorBrush(Color.FromRgb(0xC6, 0x28, 0x28)),
-        _ => Brushes.Gray,
-    };
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}
+// Status colors come from the theme (Cm.HealthDot / Cm.StateBadge styles in Views/Styles.xaml), so they follow light/dark.
 
 public class HealthToTextConverter : IValueConverter
 {
@@ -66,17 +55,5 @@ public class NullToCollapsedConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         value == null || (value is string s && s.Length == 0) || (value is System.Collections.ICollection c && c.Count == 0) ? Visibility.Collapsed : Visibility.Visible;
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
-}
-
-public class RequestStateToBrushConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
-    {
-        RequestState.Success => new SolidColorBrush(Color.FromRgb(0x2E, 0x7D, 0x32)),
-        RequestState.Error => new SolidColorBrush(Color.FromRgb(0xC6, 0x28, 0x28)),
-        RequestState.Warning => new SolidColorBrush(Color.FromRgb(0xEF, 0x6C, 0x00)),
-        _ => new SolidColorBrush(Color.FromRgb(0x15, 0x65, 0xC0)),
-    };
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }

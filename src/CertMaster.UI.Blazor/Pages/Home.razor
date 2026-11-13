@@ -7,7 +7,7 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
     <MudText Typo="Typo.h4">Dashboard</MudText>
     <MudSpacer />
-    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="Load" Disabled="_loading" />
+    <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="Load" Disabled="_loading" />
 </MudStack>
 
 @if (_loading && _summary == null)
@@ -21,12 +21,12 @@ else if (_error != null)
 else if (_summary != null)
 {
     <MudGrid Class="mb-4">
-        @Tile("Instances", $"{_summary.InstancesConnected} / {_summary.Instances}", "connected", Icons.Material.Filled.Dns, Color.Primary)
-        @Tile("Certificates", _summary.Certificates.Total.ToString(), "managed", Icons.Material.Filled.Lock, Color.Info)
-        @Tile("Healthy", _summary.Certificates.Healthy.ToString(), "OK", Icons.Material.Filled.CheckCircle, Color.Success)
-        @Tile("Attention", (_summary.Certificates.Error + _summary.Certificates.Warning).ToString(), "errors or warnings", Icons.Material.Filled.Warning, Color.Warning)
-        @Tile("Expiring", _summary.Certificates.ExpiringSoon.ToString(), "within 14 days", Icons.Material.Filled.Schedule, Color.Error)
-        @Tile("Not requested", _summary.Certificates.AwaitingUser.ToString(), "awaiting first request", Icons.Material.Filled.HourglassEmpty, Color.Default)
+        @Tile("Instances", $"{_summary.InstancesConnected} / {_summary.Instances}", "connected", Icons.Material.Outlined.Dns, Color.Primary)
+        @Tile("Certificates", _summary.Certificates.Total.ToString(), "managed", Icons.Material.Outlined.Lock, Color.Info)
+        @Tile("Healthy", _summary.Certificates.Healthy.ToString(), "OK", Icons.Material.Outlined.CheckCircle, Color.Success)
+        @Tile("Attention", (_summary.Certificates.Error + _summary.Certificates.Warning).ToString(), "errors or warnings", Icons.Material.Outlined.Warning, Color.Warning)
+        @Tile("Expiring", _summary.Certificates.ExpiringSoon.ToString(), "within 14 days", Icons.Material.Outlined.Schedule, Color.Error)
+        @Tile("Not requested", _summary.Certificates.AwaitingUser.ToString(), "awaiting first request", Icons.Material.Outlined.HourglassEmpty, Color.Default)
     </MudGrid>
 
     @if (_summary.Instances == 0)
@@ -97,16 +97,14 @@ else if (_summary != null)
 
     private RenderFragment Tile(string title, string value, string caption, string icon, Color color) => __builder =>
     {
-        <MudItem xs="12" sm="6" md="2">
-            <MudPaper Class="pa-4" Elevation="1">
-                <MudStack Row="true" AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@icon" Color="@color" Size="Size.Large" />
-                    <div>
-                        <MudText Typo="Typo.caption">@title</MudText>
-                        <MudText Typo="Typo.h5">@value</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@caption</MudText>
-                    </div>
-                </MudStack>
+        <MudItem xs="12" sm="6" md="4" lg="2">
+            <MudPaper Class="pa-4 cm-tile" Elevation="1">
+                <div class="@($"cm-tile-icon cm-tint-{color.ToString().ToLowerInvariant()}")">
+                    <MudIcon Icon="@icon" Color="@color" />
+                </div>
+                <MudText Typo="Typo.body2" Class="mt-3">@title</MudText>
+                <div class="cm-tile-value">@value</div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@caption</MudText>
             </MudPaper>
         </MudItem>
     };

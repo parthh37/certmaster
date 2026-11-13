@@ -3,8 +3,9 @@
 @inject HubSession Session
 @inject HubClient Hub
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
-<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_dark" />
+<MudThemeProvider @ref="_themeProvider" Theme="FluentTheme.Theme" @bind-IsDarkMode="_dark" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -19,59 +20,68 @@ else if (!Session.IsAuthenticated)
 }
 else
 {
-    <MudLayout>
-        <MudAppBar Elevation="1" Color="Color.Primary">
-            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="() => _drawer = !_drawer" />
-            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
-            <MudText Typo="Typo.h6">CertMaster Management Hub</MudText>
+    <MudLayout Class="cm-shell">
+        <MudAppBar Elevation="0" Class="cm-appbar">
+            <MudIconButton Icon="@Icons.Material.Outlined.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="() => _drawer = !_drawer" aria-label="Toggle navigation" />
+            <img src="icon-192.png" alt="" class="cm-logo" />
+            <span class="cm-app-title">CertMaster <span class="cm-app-subtitle">Management Hub</span></span>
             <MudSpacer />
             @if (Session.IsAdmin && _update is { IsUpdateAvailable: true })
             {
                 <MudTooltip Text="@($"Management Hub {_update.LatestVersion} is available")">
-                    <MudButton Href="/admin/updates" Color="Color.Inherit" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.NewReleases" Class="mr-2">
+                    <MudButton Href="/admin/updates" Color="Color.Primary" Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Outlined.NewReleases" Class="mr-2">
                         Update available
                     </MudButton>
                 </MudTooltip>
             }
-            <MudIconButton Icon="@(_dark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="() => _dark = !_dark" />
-            <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
-                <MudMenuItem Disabled="true">@Session.Username</MudMenuItem>
-                <MudMenuItem Href="/account/password" Icon="@Icons.Material.Filled.Password">Change password</MudMenuItem>
-                <MudMenuItem OnClick="Logout" Icon="@Icons.Material.Filled.Logout">Sign out</MudMenuItem>
+            <MudTooltip Text="@(_dark ? "Switch to light theme" : "Switch to dark theme")">
+                <MudIconButton Icon="@(_dark ? Icons.Material.Outlined.LightMode : Icons.Material.Outlined.DarkMode)" Color="Color.Inherit" OnClick="ToggleTheme" aria-label="Toggle theme" />
+            </MudTooltip>
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" aria-label="Account">
+                <ActivatorContent>
+                    <MudAvatar Size="Size.Small" Class="cm-avatar">@Initial</MudAvatar>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem Disabled="true">@Session.Username</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Href="/account/password" Icon="@Icons.Material.Outlined.Password">Change password</MudMenuItem>
+                    <MudMenuItem OnClick="Logout" Icon="@Icons.Material.Outlined.Logout">Sign out</MudMenuItem>
+                </ChildContent>
             </MudMenu>
         </MudAppBar>
-        <MudDrawer @bind-Open="_drawer" ClipMode="DrawerClipMode.Always" Elevation="1" Variant="DrawerVariant.Responsive">
-            <MudNavMenu>
-                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-                <MudNavLink Href="/certificates" Icon="@Icons.Material.Filled.Lock">Certificates</MudNavLink>
-                <MudNavLink Href="/instances" Icon="@Icons.Material.Filled.Dns">Instances</MudNavLink>
-                <MudNavGroup Title="Settings" Icon="@Icons.Material.Filled.Settings" Expanded="true">
-                    <MudNavLink Href="/accounts" Icon="@Icons.Material.Filled.AccountBalance">Certificate Authorities</MudNavLink>
-                    <MudNavLink Href="/credentials" Icon="@Icons.Material.Filled.Key">Stored Credentials</MudNavLink>
+        <MudDrawer @bind-Open="_drawer" ClipMode="DrawerClipMode.Always" Elevation="0" Variant="DrawerVariant.Responsive" Class="cm-drawer">
+            <MudNavMenu Class="cm-nav">
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.SpaceDashboard">Dashboard</MudNavLink>
+                <MudNavLink Href="/certificates" Icon="@Icons.Material.Outlined.WorkspacePremium">Certificates</MudNavLink>
+                <MudNavLink Href="/instances" Icon="@Icons.Material.Outlined.Dns">Instances</MudNavLink>
+                <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="true">
+                    <MudNavLink Href="/accounts" Icon="@Icons.Material.Outlined.AccountBalance">Certificate Authorities</MudNavLink>
+                    <MudNavLink Href="/credentials" Icon="@Icons.Material.Outlined.Key">Stored Credentials</MudNavLink>
                     @if (Session.IsAdmin)
                     {
-                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users &amp; Roles</MudNavLink>
-                        <MudNavLink Href="/admin/updates" Icon="@Icons.Material.Filled.SystemUpdateAlt">Updates</MudNavLink>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.People">Users &amp; Roles</MudNavLink>
+                        <MudNavLink Href="/admin/updates" Icon="@Icons.Material.Outlined.SystemUpdateAlt">Updates</MudNavLink>
                     }
                 </MudNavGroup>
-                <MudNavLink Href="/docs" ForceLoad="true" Target="_blank" Icon="@Icons.Material.Filled.Api">API Reference</MudNavLink>
+                <MudNavLink Href="/docs" ForceLoad="true" Target="_blank" Icon="@Icons.Material.Outlined.Api">API Reference</MudNavLink>
             </MudNavMenu>
         </MudDrawer>
-        <MudMainContent>
-            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
-                @Body
-            </MudContainer>
+        <MudMainContent Class="cm-main">
+            <div class="cm-layer">
+                <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="cm-page">
+                    @Body
+                </MudContainer>
+            </div>
         </MudMainContent>
     </MudLayout>
 }
 
 @code {
-    private bool _ready, _drawer = true, _dark;
-    private readonly MudTheme _theme = new()
-    {
-        PaletteLight = new PaletteLight { Primary = "#1565c0", AppbarBackground = "#0d47a1", Secondary = "#00897b" },
-        PaletteDark = new PaletteDark { Primary = "#64b5f6", Secondary = "#4db6ac" },
-    };
+    private const string ThemeStorageKey = "certmaster-theme";
+    private MudThemeProvider? _themeProvider;
+    private bool _ready, _drawer = true, _dark, _themeOverridden;
+
+    private string Initial => string.IsNullOrEmpty(Session.Username) ? "?" : Session.Username[..1].ToUpperInvariant();
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,6 +91,39 @@ else
         _ready = true;
         Guard();
         await LoadUpdateAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _themeProvider == null) return;
+        // Follow the operating system's light/dark setting unless the user picked one with the toggle.
+        string? stored = null;
+        try { stored = await JS.InvokeAsync<string?>("localStorage.getItem", ThemeStorageKey); } catch (JSException) { }
+        if (stored is "light" or "dark")
+        {
+            _themeOverridden = true;
+            _dark = stored == "dark";
+        }
+        else
+        {
+            _dark = await _themeProvider.GetSystemDarkModeAsync();
+        }
+        await _themeProvider.WatchSystemDarkModeAsync(OnSystemDarkModeChanged);
+        StateHasChanged();
+    }
+
+    private Task OnSystemDarkModeChanged(bool dark)
+    {
+        if (_themeOverridden) return Task.CompletedTask;
+        _dark = dark;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleTheme()
+    {
+        _dark = !_dark;
+        _themeOverridden = true;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", ThemeStorageKey, _dark ? "dark" : "light"); } catch (JSException) { }
     }
 
     private UpdateStatus? _update;

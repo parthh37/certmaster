@@ -28,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     public AgentClient Client => _client;
     public SettingsViewModel Settings { get; }
     public UpdatesViewModel Updates { get; }
+    public AppearanceViewModel Appearance { get; } = new();
 
     public MainViewModel(AgentClient client)
     {

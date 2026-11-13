@@ -6,8 +6,8 @@
 
     <!-- Dynamic provider parameter editor: picks a control based on the parameter type. -->
     <DataTemplate DataType="{x:Type vm:ParameterViewModel}">
-        <StackPanel Margin="0,0,0,8">
-            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,0,2" />
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock Text="{Binding Name}" Foreground="{DynamicResource Cm.TextPrimary}" TextWrapping="Wrap" Margin="0,0,0,6" />
             <ContentControl Content="{Binding}">
                 <ContentControl.Style>
                     <Style TargetType="ContentControl">
@@ -50,7 +50,7 @@
                                 <Setter Property="ContentTemplate">
                                     <Setter.Value>
                                         <DataTemplate>
-                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="70" TextWrapping="Wrap" FontFamily="Consolas" />
+                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="70" TextWrapping="Wrap" FontFamily="{StaticResource Cm.FontMono}" />
                                         </DataTemplate>
                                     </Setter.Value>
                                 </Setter>
@@ -59,7 +59,7 @@
                     </Style>
                 </ContentControl.Style>
             </ContentControl>
-            <TextBlock Text="{Binding Description}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Description}" Style="{StaticResource Cm.Caption}" Margin="0,4,0,0" />
         </StackPanel>
     </DataTemplate>
 </ResourceDictionary>
