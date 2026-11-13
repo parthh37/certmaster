@@ -8,6 +8,8 @@ public static class NotificationEvents
     public const string DeploymentTasksFailed = "deployment_tasks_failed";
     /// <summary>A request succeeded after the previous attempt failed.</summary>
     public const string Recovered = "certificate_request_recovered";
+    /// <summary>The certificate expires soon (or has expired) and has not been renewed yet. Sent at most once a day.</summary>
+    public const string CertificateExpiring = "certificate_expiring";
     /// <summary>Sent by the Settings "Send test notification" button.</summary>
     public const string Test = "test";
 }

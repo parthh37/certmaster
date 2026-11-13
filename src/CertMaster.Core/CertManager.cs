@@ -40,6 +40,8 @@ public partial class CertManager
     private readonly HttpClient _http;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _running = new();
     private readonly SemaphoreSlim _renewAllLock = new(1, 1);
+    /// <summary>Serializes read-modify-write of stored items, so a background update (ARI window, expiry warning) never overwrites an edit or brings back a deleted item.</summary>
+    private readonly SemaphoreSlim _itemWriteLock = new(1, 1);
 
     public IProgressReporter ProgressReporter { get; set; } = new NullProgressReporter();
 
@@ -102,6 +104,9 @@ public partial class CertManager
         // The running request saves its own copy of the item when it finishes, which would overwrite these changes.
         if (IsRequestInProgress(item.Id)) return new ActionResult<ManagedCertificate> { Message = RequestInProgressMessage("saved") };
 
+        await _itemWriteLock.WaitAsync();
+        try
+        {
         // Preserve status fields owned by the engine.
         var existing = await _store.GetAsync<ManagedCertificate>(ItemsCollection, item.Id);
         if (existing != null)
@@ -114,11 +119,16 @@ public partial class CertManager
             item.RenewalFailureMessage = existing.RenewalFailureMessage; item.DateLastRenewalAttempt = existing.DateLastRenewalAttempt;
             item.CertificateRevoked = existing.CertificateRevoked; item.CertificateKeyType = existing.CertificateKeyType;
             item.LastAttemptedCA = existing.LastAttemptedCA; item.CurrentOrderUri = existing.CurrentOrderUri;
+            item.AriWindowStart = existing.AriWindowStart; item.AriWindowEnd = existing.AriWindowEnd;
+            item.AriExplanationUrl = existing.AriExplanationUrl; item.AriRenewalTime = existing.AriRenewalTime;
+            item.DateNextAriCheck = existing.DateNextAriCheck; item.DateLastExpiryWarning = existing.DateLastExpiryWarning;
             // configuration changed: allow an immediate retry
             item.DateNextScheduledRenewalAttempt = null;
         }
         RefreshHealth(item);
         await _store.UpsertAsync(ItemsCollection, item.Id, item);
+        }
+        finally { _itemWriteLock.Release(); }
         await ProgressReporter.ManagedCertificateUpdatedAsync(item);
         return new ActionResult<ManagedCertificate> { IsSuccess = true, Message = "Saved", Result = item };
     }
@@ -127,8 +137,9 @@ public partial class CertManager
     public async Task<bool> DeleteManagedCertificateAsync(string id)
     {
         if (IsRequestInProgress(id)) throw new InvalidOperationException(RequestInProgressMessage("deleted"));
-        var deleted = await _store.DeleteAsync(ItemsCollection, id);
-        return deleted;
+        await _itemWriteLock.WaitAsync();
+        try { return await _store.DeleteAsync(ItemsCollection, id); }
+        finally { _itemWriteLock.Release(); }
     }
 
     internal static string RequestInProgressMessage(string what) =>
@@ -312,10 +323,8 @@ public partial class CertManager
             item.LastRenewalStatus = RequestState.Error;
             item.RenewalFailureCount++;
             item.RenewalFailureMessage = msg;
-            var backoffHours = Math.Min(Math.Pow(2, item.RenewalFailureCount - 1), 24);
-            // Hammering a CA that is rate limiting us only extends the limit; wait at least 3 hours.
-            if (IsRateLimited(ex)) backoffHours = Math.Max(backoffHours, 3);
-            item.DateNextScheduledRenewalAttempt = DateTimeOffset.UtcNow.AddHours(backoffHours);
+            var failedAt = DateTimeOffset.UtcNow;
+            item.DateNextScheduledRenewalAttempt = failedAt + RetryBackoff(item.RenewalFailureCount, IsRateLimited(ex), item.DateExpiry, failedAt);
             result.IsSuccess = false;
             result.Message = msg;
             _logger.LogWarning(ex, "Certificate request failed for {Name}", item.Name);
@@ -381,7 +390,12 @@ public partial class CertManager
     {
         for (var attempt = 1; ; attempt++)
         {
-            try { await _store.UpsertAsync(ItemsCollection, item.Id, item); return; }
+            try
+            {
+                await _itemWriteLock.WaitAsync();
+                try { await _store.UpsertAsync(ItemsCollection, item.Id, item); return; }
+                finally { _itemWriteLock.Release(); }
+            }
             catch (Exception ex) when (attempt < 5)
             {
                 log.Warn($"Saving the request result failed ({ex.Message}); retrying.");
@@ -723,6 +737,10 @@ public partial class CertManager
         item.CertificateKeyType = leaf.GetRSAPublicKey() is { } rsa ? $"RSA {rsa.KeySize}" : leaf.GetECDsaPublicKey() is { } ec ? $"ECDSA P-{ec.KeySize}" : key.Algorithm.ToString();
         item.CertificateRevoked = false;
         item.ARICertificateId = ariId;
+        // The ARI window belonged to the replaced certificate; the new one is checked on the next renewal run.
+        item.AriWindowStart = item.AriWindowEnd = item.AriRenewalTime = item.DateNextAriCheck = null;
+        item.AriExplanationUrl = null;
+        item.DateLastExpiryWarning = null;
         log.Info($"Certificate saved to {files.Folder}. Thumbprint {leaf.Thumbprint}, expires {leaf.NotAfter:u}");
     }
 
@@ -974,63 +992,4 @@ public partial class CertManager
         };
     }
 
-    // ---------- Renewal ----------
-
-    public static bool IsRenewalDue(ManagedCertificate item, Preferences prefs, DateTimeOffset now, out string reason)
-    {
-        reason = "";
-        if (item.ItemType != ManagedCertificateType.SSL_ACME || !item.IncludeInAutoRenew) { reason = "auto-renew disabled"; return false; }
-        if (item.DateNextScheduledRenewalAttempt != null && item.DateNextScheduledRenewalAttempt > now) { reason = "waiting for retry back-off"; return false; }
-        if (item.DateExpiry == null) { reason = "no certificate yet"; return true; }
-        if (item.CertificateRevoked) { reason = "certificate revoked"; return true; }
-
-        double? lifetime = item.DateStart != null ? (item.DateExpiry.Value - item.DateStart.Value).TotalDays : null;
-        double days;
-        if (item.CustomRenewalDaysBeforeExpiry == null && lifetime != null
-            && string.Equals(prefs.RenewalIntervalMode, RenewalIntervalModes.PercentageOfLifetime, StringComparison.OrdinalIgnoreCase))
-        {
-            // Renew once the configured share of the lifetime has passed, i.e. when (100 - pct)% remains.
-            var pct = Math.Clamp(prefs.RenewalLifetimePercentage, 1, 99);
-            days = lifetime.Value * (100 - pct) / 100.0;
-        }
-        else
-        {
-            days = item.CustomRenewalDaysBeforeExpiry ?? prefs.RenewalIntervalDays;
-            if (lifetime != null) days = Math.Min(days, lifetime.Value / 3.0);
-        }
-        var remaining = (item.DateExpiry.Value - now).TotalDays;
-        if (remaining <= days) { reason = $"{remaining:0.#} days remaining (threshold {days:0.#})"; return true; }
-        reason = "not due";
-        return false;
-    }
-
-    /// <summary>Renew all items that are due. Returns the results for items attempted.</summary>
-    public async Task<List<CertificateRequestResult>> PerformRenewAllAsync(bool forceAll = false, CancellationToken ct = default)
-    {
-        var results = new List<CertificateRequestResult>();
-        if (!await _renewAllLock.WaitAsync(0, ct)) return results;
-        try
-        {
-            var prefs = await GetPreferencesAsync();
-            var items = await GetManagedCertificatesAsync();
-            var due = items.Where(i => forceAll ? i.IncludeInAutoRenew : IsRenewalDue(i, prefs, DateTimeOffset.UtcNow, out _)).ToList();
-            if (prefs.MaxRenewalRequests > 0) due = due.Take(prefs.MaxRenewalRequests).ToList();
-            if (due.Count > 0) _logger.LogInformation("Renewal: {Count} item(s) due", due.Count);
-            foreach (var item in due)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (IsRequestInProgress(item.Id)) continue;
-                // One item failing in an unexpected way must not stop the renewal of the others.
-                try { results.Add(await PerformCertificateRequestAsync(item.Id, ct)); }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Renewal of {Name} failed unexpectedly", item.Name);
-                    results.Add(new CertificateRequestResult { ManagedItem = item, Message = ex.Message });
-                }
-            }
-        }
-        finally { _renewAllLock.Release(); }
-        return results;
-    }
 }

@@ -31,7 +31,8 @@ public partial class CertManager
         {
             NotificationEvents.RequestFailed => $"CertMaster on {host}: certificate request for {name} failed (attempt {item.RenewalFailureCount}): {message}",
             NotificationEvents.DeploymentTasksFailed => $"CertMaster on {host}: certificate for {name} was issued but deployment tasks failed: {message}",
-            NotificationEvents.Recovered => $"CertMaster on {host}: certificate request for {name} succeeded after earlier failures. {message}",
+            NotificationEvents.CertificateExpiring => $"CertMaster on {host}: {name}: {message}",
+            NotificationEvents.Recovered =>$"CertMaster on {host}: certificate request for {name} succeeded after earlier failures. {message}",
             _ => $"CertMaster on {host}: {message}",
         };
         return new NotificationMessage

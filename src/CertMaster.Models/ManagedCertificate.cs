@@ -57,6 +57,16 @@ public class ManagedCertificate
     public string? CurrentOrderUri { get; set; }
     /// <summary>ACME Renewal Information (RFC 9773) certificate id.</summary>
     public string? ARICertificateId { get; set; }
+    /// <summary>Renewal window the CA suggests for the current certificate (ARI). Moves earlier when the CA plans to revoke it.</summary>
+    public DateTimeOffset? AriWindowStart { get; set; }
+    public DateTimeOffset? AriWindowEnd { get; set; }
+    public string? AriExplanationUrl { get; set; }
+    /// <summary>Renewal time picked inside the ARI window (RFC 9773 section 4.2). Renewal is due from this time on.</summary>
+    public DateTimeOffset? AriRenewalTime { get; set; }
+    /// <summary>When the ARI window is fetched again (the CA's Retry-After).</summary>
+    public DateTimeOffset? DateNextAriCheck { get; set; }
+    /// <summary>When the last "certificate expiring and not renewed" notification was sent.</summary>
+    public DateTimeOffset? DateLastExpiryWarning { get; set; }
     public string? LastAttemptedCA { get; set; }
 
     /// <summary>Custom renewal: renew when this many days remain before expiry (null = use global preference).</summary>
