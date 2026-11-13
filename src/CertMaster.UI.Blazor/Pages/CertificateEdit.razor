@@ -17,7 +17,7 @@
 }
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
-    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="/certificates" />
+    <MudIconButton Icon="@Icons.Material.Outlined.ArrowBack" Href="/certificates" />
     <div>
         <MudText Typo="Typo.h5">@(IsNew ? "New certificate" : _item.Name)</MudText>
         <MudText Typo="Typo.caption" Color="Color.Secondary">on @_instanceTitle</MudText>
@@ -26,16 +26,16 @@
     <MudSpacer />
     @if (Session.CanManage)
     {
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Science" OnClick="Test" Disabled="_busy">Test</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="_busy">Save</MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Science" OnClick="Test" Disabled="_busy">Test</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.Save" OnClick="Save" Disabled="_busy">Save</MudButton>
         @if (!IsNew)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RequestNow" Disabled="_busy">Request certificate</MudButton>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert">
-                <MudMenuItem OnClick="@(() => Download(CertificateDownloadFormat.pfx))" Icon="@Icons.Material.Filled.Download">Download PFX</MudMenuItem>
-                <MudMenuItem OnClick="@(() => Download(CertificateDownloadFormat.pem_chain))" Icon="@Icons.Material.Filled.Download">Download PEM (full chain)</MudMenuItem>
-                <MudMenuItem OnClick="Revoke" Icon="@Icons.Material.Filled.Block">Revoke certificate</MudMenuItem>
-                <MudMenuItem OnClick="Delete" Icon="@Icons.Material.Filled.Delete">Delete</MudMenuItem>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Outlined.PlayArrow" OnClick="RequestNow" Disabled="_busy">Request certificate</MudButton>
+            <MudMenu Icon="@Icons.Material.Outlined.MoreVert">
+                <MudMenuItem OnClick="@(() => Download(CertificateDownloadFormat.pfx))" Icon="@Icons.Material.Outlined.Download">Download PFX</MudMenuItem>
+                <MudMenuItem OnClick="@(() => Download(CertificateDownloadFormat.pem_chain))" Icon="@Icons.Material.Outlined.Download">Download PEM (full chain)</MudMenuItem>
+                <MudMenuItem OnClick="Revoke" Icon="@Icons.Material.Outlined.Block">Revoke certificate</MudMenuItem>
+                <MudMenuItem OnClick="Delete" Icon="@Icons.Material.Outlined.Delete">Delete</MudMenuItem>
             </MudMenu>
         }
     }
@@ -43,7 +43,7 @@
 
 @if (_progress != null && !_progress.IsFinal)
 {
-    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.Sync">@_progress.Message</MudAlert>
+    <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Outlined.Sync">@_progress.Message</MudAlert>
     <MudProgressLinear Indeterminate="true" Class="mb-3" />
 }
 @if (_item.RenewalFailureMessage != null && _item.Health == ManagedCertificateHealth.Error)
@@ -53,7 +53,7 @@
 @if (_testResults != null)
 {
     <MudPaper Class="pa-3 mb-3" Outlined="true">
-        <MudStack Row="true" AlignItems="AlignItems.Center"><MudText Typo="Typo.subtitle1">Test results</MudText><MudSpacer /><MudIconButton Size="Size.Small" Icon="@Icons.Material.Filled.Close" OnClick="() => _testResults = null" /></MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center"><MudText Typo="Typo.subtitle1">Test results</MudText><MudSpacer /><MudIconButton Size="Size.Small" Icon="@Icons.Material.Outlined.Close" OnClick="() => _testResults = null" /></MudStack>
         @foreach (var s in _testResults)
         {
             <MudAlert Severity="@(s.HasError ? Severity.Error : Severity.Success)" Dense="true" Class="mb-1"><b>@s.Title</b>: @s.Description</MudAlert>
@@ -62,7 +62,7 @@
 }
 
 <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
-    <MudTabPanel Text="Certificate" Icon="@Icons.Material.Filled.Lock">
+    <MudTabPanel Text="Certificate" Icon="@Icons.Material.Outlined.Lock">
         <MudGrid>
             <MudItem xs="12" md="6">
                 <MudTextField @bind-Value="_item.Name" Label="Name" Variant="Variant.Outlined" Class="mb-3" HelperText="Defaults to the primary domain" />
@@ -116,7 +116,7 @@
         }
     </MudTabPanel>
 
-    <MudTabPanel Text="Authorization" Icon="@Icons.Material.Filled.VerifiedUser">
+    <MudTabPanel Text="Authorization" Icon="@Icons.Material.Outlined.VerifiedUser">
         <MudText Typo="Typo.body2" Class="mb-3">
             How the CA verifies you control each domain. Use <b>http-01</b> for public web servers on port 80, or <b>dns-01</b> for wildcards and internal hosts.
             Add more configurations with a domain match to use different methods per domain.
@@ -173,14 +173,14 @@
                 </MudGrid>
                 @if (_item.RequestConfig.Challenges.Count > 1)
                 {
-                    <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@(() => _item.RequestConfig.Challenges.Remove(c))">Remove</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Outlined.Delete" OnClick="@(() => _item.RequestConfig.Challenges.Remove(c))">Remove</MudButton>
                 }
             </MudPaper>
         }
-        <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _item.RequestConfig.Challenges.Add(new CertRequestChallengeConfig { ChallengeProvider = "HTTP01.BuiltIn" }))">Add authorization config</MudButton>
+        <MudButton StartIcon="@Icons.Material.Outlined.Add" OnClick="@(() => _item.RequestConfig.Challenges.Add(new CertRequestChallengeConfig { ChallengeProvider = "HTTP01.BuiltIn" }))">Add authorization config</MudButton>
     </MudTabPanel>
 
-    <MudTabPanel Text="Deployment" Icon="@Icons.Material.Filled.Dns">
+    <MudTabPanel Text="Deployment" Icon="@Icons.Material.Outlined.Dns">
         <MudText Typo="Typo.body2" Class="mb-3">
             Certificates can be applied to IIS bindings on the instance automatically, or deployed with tasks. @_serverStatusText
         </MudText>
@@ -223,8 +223,8 @@
         </MudGrid>
     </MudTabPanel>
 
-    <MudTabPanel Text="Preview" Icon="@Icons.Material.Filled.PlayCircleOutline" OnClick="LoadPreview">
-        <MudStack Row="true" Class="mb-2"><MudText Typo="Typo.body2">What a request would do with the current (unsaved) settings. Nothing is changed.</MudText><MudSpacer /><MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadPreview">Refresh</MudButton></MudStack>
+    <MudTabPanel Text="Preview" Icon="@Icons.Material.Outlined.PlayCircleOutline" OnClick="LoadPreview">
+        <MudStack Row="true" Class="mb-2"><MudText Typo="Typo.body2">What a request would do with the current (unsaved) settings. Nothing is changed.</MudText><MudSpacer /><MudButton StartIcon="@Icons.Material.Outlined.Refresh" OnClick="LoadPreview">Refresh</MudButton></MudStack>
         @if (_preview == null) { <MudProgressLinear Indeterminate="true" /> }
         else
         {
@@ -239,7 +239,7 @@
         }
     </MudTabPanel>
 
-    <MudTabPanel Text="Tasks" Icon="@Icons.Material.Filled.PlaylistPlay">
+    <MudTabPanel Text="Tasks" Icon="@Icons.Material.Outlined.PlaylistPlay">
         @TaskList("Deployment tasks (after request)", _item.PostRequestTasks, false)
         <MudDivider Class="my-4" />
         @TaskList("Pre-request tasks", _item.PreRequestTasks, true)
@@ -260,8 +260,8 @@
 
     @if (!IsNew)
     {
-        <MudTabPanel Text="Log" Icon="@Icons.Material.Filled.Article" OnClick="LoadLog">
-            <MudStack Row="true" Class="mb-2"><MudSpacer /><MudButton StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadLog">Refresh</MudButton></MudStack>
+        <MudTabPanel Text="Log" Icon="@Icons.Material.Outlined.Article" OnClick="LoadLog">
+            <MudStack Row="true" Class="mb-2"><MudSpacer /><MudButton StartIcon="@Icons.Material.Outlined.Refresh" OnClick="LoadLog">Refresh</MudButton></MudStack>
             <div class="cm-log cm-mono">
                 @foreach (var l in _log)
                 {
@@ -539,8 +539,8 @@
                         }
                     </MudGrid>
                     <MudStack Row="true" Class="mt-2">
-                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => RunTask(task))" Disabled="IsNew">Run now</MudButton>
-                        <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="@(() => tasks.Remove(task))">Remove task</MudButton>
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Outlined.PlayArrow" OnClick="@(() => RunTask(task))" Disabled="IsNew">Run now</MudButton>
+                        <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Outlined.Delete" OnClick="@(() => tasks.Remove(task))">Remove task</MudButton>
                     </MudStack>
                 </MudExpansionPanel>
             }
@@ -552,7 +552,7 @@
                     <MudSelectItem T="string" Value="@p.Id">@p.Title</MudSelectItem>
                 }
             </MudSelect>
-            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddTask(tasks))" Disabled="_newTaskType == null">Add</MudButton>
+            <MudButton StartIcon="@Icons.Material.Outlined.Add" OnClick="@(() => AddTask(tasks))" Disabled="_newTaskType == null">Add</MudButton>
         </MudStack>
     };
 

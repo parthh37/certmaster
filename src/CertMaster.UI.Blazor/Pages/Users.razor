@@ -21,8 +21,8 @@
                         <tr>
                             <td>@u.Username</td><td>@u.Email</td><td>@string.Join(", ", u.Roles)</td><td>@(u.IsEnabled ? "Yes" : "No")</td>
                             <td>
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(u))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(u))" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" OnClick="@(() => Edit(u))" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(u))" />
                             </td>
                         </tr>
                     }

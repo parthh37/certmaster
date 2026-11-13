@@ -10,7 +10,7 @@
 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
     <MudText Typo="Typo.h4">Updates</MudText>
     <MudSpacer />
-    <MudIconButton Icon="@Icons.Material.Filled.Refresh" OnClick="@(() => Load(false))" />
+    <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="@(() => Load(false))" />
 </MudStack>
 
 @if (!Session.IsAdmin)
@@ -25,15 +25,15 @@ else
         {
             <UpdateStatusLine Status="_hub" />
             <MudStack Row="true" Class="mt-3" Wrap="Wrap.Wrap">
-                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Search" Disabled="_busy" OnClick="CheckHub">Check now</MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Search" Disabled="_busy" OnClick="CheckHub">Check now</MudButton>
                 @if (_hub.IsUpdateAvailable)
                 {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.SystemUpdateAlt"
                                Disabled="@(_busy || !_hub.CanInstall || IsActive(_hub))" OnClick="InstallHub">Install @_hub.LatestVersion</MudButton>
                 }
                 @if (_hub.ReleaseUrl != null)
                 {
-                    <MudButton Variant="Variant.Text" Href="@_hub.ReleaseUrl" Target="_blank" EndIcon="@Icons.Material.Filled.OpenInNew">Release notes</MudButton>
+                    <MudButton Variant="Variant.Text" Href="@_hub.ReleaseUrl" Target="_blank" EndIcon="@Icons.Material.Outlined.OpenInNew">Release notes</MudButton>
                 }
             </MudStack>
         }
@@ -74,11 +74,11 @@ else
                 <MudTd>
                     @if (context.Instance.IsConnected)
                     {
-                        <MudTooltip Text="Check now"><MudIconButton Icon="@Icons.Material.Filled.Search" Size="Size.Small" Disabled="_busy" OnClick="@(() => CheckAgent(context))" /></MudTooltip>
+                        <MudTooltip Text="Check now"><MudIconButton Icon="@Icons.Material.Outlined.Search" Size="Size.Small" Disabled="_busy" OnClick="@(() => CheckAgent(context))" /></MudTooltip>
                         @if (context.Status is { IsUpdateAvailable: true } s)
                         {
                             <MudTooltip Text="@($"Install {s.LatestVersion}")">
-                                <MudIconButton Icon="@Icons.Material.Filled.SystemUpdateAlt" Size="Size.Small" Color="Color.Primary"
+                                <MudIconButton Icon="@Icons.Material.Outlined.SystemUpdateAlt" Size="Size.Small" Color="Color.Primary"
                                                Disabled="@(_busy || !s.CanInstall || IsActive(s))" OnClick="@(() => InstallAgent(context))" />
                             </MudTooltip>
                         }
@@ -89,7 +89,7 @@ else
         </MudTable>
         @if (_agents.Any(a => a.Status is { IsUpdateAvailable: true, CanInstall: true }))
         {
-            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt" Disabled="_busy" OnClick="InstallAllAgents">
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.SystemUpdateAlt" Disabled="_busy" OnClick="InstallAllAgents">
                 Update all agents
             </MudButton>
         }

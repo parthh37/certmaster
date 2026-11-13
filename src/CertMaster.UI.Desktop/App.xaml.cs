@@ -11,6 +11,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandled;
+        ThemeService.Initialize();
         // The start-up progress window must not end the app when it closes; the real main window takes over below.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -53,17 +54,27 @@ public partial class App : Application
     /// <summary>A small status window shown only while the app starts or waits for the agent service.</summary>
     private static Window ShowProgress(Window? existing, string message)
     {
-        if (existing is { Content: System.Windows.Controls.TextBlock text }) { text.Text = message; return existing; }
-        var window = new Window
+        if (existing?.Tag is System.Windows.Controls.TextBlock current) { current.Text = message; return existing; }
+        var text = new System.Windows.Controls.TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        var ring = new MahApps.Metro.Controls.ProgressRing { IsActive = true, Width = 28, Height = 28, Margin = new Thickness(0, 0, 16, 0) };
+        var panel = new System.Windows.Controls.DockPanel { Margin = new Thickness(24, 16, 24, 24) };
+        System.Windows.Controls.DockPanel.SetDock(ring, System.Windows.Controls.Dock.Left);
+        panel.Children.Add(ring);
+        panel.Children.Add(text);
+        var window = new MahApps.Metro.Controls.MetroWindow
         {
             Title = "CertMaster",
-            Width = 420,
+            Width = 440,
             SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize,
-            WindowStyle = WindowStyle.ToolWindow,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Content = new System.Windows.Controls.TextBlock { Text = message, Margin = new Thickness(24), TextWrapping = TextWrapping.Wrap },
+            Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/certmaster.ico")),
+            ShowMinButton = false,
+            ShowMaxRestoreButton = false,
+            Content = panel,
+            Tag = text,
         };
+        window.SetResourceReference(FrameworkElement.StyleProperty, "Cm.Window");
         window.Show();
         return window;
     }

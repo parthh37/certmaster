@@ -3,7 +3,7 @@
     <MudText Typo="Typo.body1">Version <b>@Status.CurrentVersion</b></MudText>
     @if (Status.IsUpdateAvailable)
     {
-        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.NewReleases" Text="@($"{Status.LatestVersion} available")" />
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Outlined.NewReleases" Text="@($"{Status.LatestVersion} available")" />
     }
     else if (Status.LastChecked != null && Status.State != UpdateState.Failed)
     {

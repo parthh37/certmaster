@@ -28,7 +28,7 @@
                             <td>@a.Email</td>
                             <td>@(a.IsStagingAccount ? "Staging" : "Production")</td>
                             <td class="cm-mono" style="font-size:.75rem">@a.AccountURI</td>
-                            <td>@if (Session.CanManage) { <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(a))" /> }</td>
+                            <td>@if (Session.CanManage) { <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Remove(a))" /> }</td>
                         </tr>
                     }
                     @if (_accounts.Count == 0) { <tr><td colspan="5">No accounts yet. Add one to start requesting certificates.</td></tr> }

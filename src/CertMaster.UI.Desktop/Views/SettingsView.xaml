@@ -2,191 +2,266 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls">
-    <DockPanel Margin="4">
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Message}" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,6,0,0" TextWrapping="Wrap" />
-        <TabControl TabStripPlacement="Left" mah:HeaderedControlHelper.HeaderFontSize="15">
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Settings" Style="{StaticResource Cm.Title}" Margin="0,0,0,12" />
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Message}" Foreground="{DynamicResource Cm.AccentText}" Margin="0,8,0,8" TextWrapping="Wrap"
+                   Visibility="{Binding Message, Converter={StaticResource NullCollapsed}}" />
+        <TabControl Style="{StaticResource Cm.PivotTabControl}">
             <!-- General -->
             <TabItem Header="General">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16,4" MaxWidth="620" HorizontalAlignment="Left" DataContext="{Binding Preferences}">
-                        <TextBlock Text="Renewals" Style="{StaticResource SectionTitle}" />
-                        <TextBlock Text="Renew certificates at" Style="{StaticResource FieldLabel}" />
-                        <ComboBox ItemsSource="{Binding DataContext.Settings.RenewalModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                                  DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding RenewalIntervalMode}" Width="320" HorizontalAlignment="Left" />
-                        <TextBlock Text="Days before expiry (short-lived certificates renew at one third of their lifetime)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
-                        <mah:NumericUpDown Value="{Binding RenewalIntervalDays}" Minimum="1" Maximum="60" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="Percentage of lifetime (e.g. 75 renews a 90-day certificate after about 67 days)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
-                        <mah:NumericUpDown Value="{Binding RenewalLifetimePercentage}" Minimum="1" Maximum="99" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="A per-certificate &quot;renew N days before expiry&quot; value overrides both." Style="{StaticResource Hint}" TextWrapping="Wrap" />
-                        <TextBlock Text="Check for renewals every (minutes)" Style="{StaticResource FieldLabel}" />
-                        <mah:NumericUpDown Value="{Binding RenewalCheckIntervalMinutes}" Minimum="5" Maximum="1440" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="Maximum renewals per run (0 = unlimited)" Style="{StaticResource FieldLabel}" />
-                        <mah:NumericUpDown Value="{Binding MaxRenewalRequests}" Minimum="0" Maximum="1000" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="DNS propagation check: wait up to (seconds) for TXT records on authoritative name servers (0 = off)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
-                        <mah:NumericUpDown Value="{Binding DnsPropagationCheckSeconds}" Minimum="0" Maximum="3600" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="HTTP Challenge Server" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
-                        <mah:ToggleSwitch Content="Enable built-in HTTP challenge server (http-01)" IsOn="{Binding EnableHttpChallengeServer}" />
-                        <TextBlock Text="Listener prefix (http.sys URL; shares port 80 with IIS)" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding HttpChallengeServerPrefix}" />
-                        <TextBlock Text="Storage" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
-                        <TextBlock Text="Certificate store folder" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding CertificateStorePath}" />
-                        <TextBlock Text="Default key type (used by certificates whose key type is &quot;Instance default&quot;)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
-                        <ComboBox ItemsSource="{Binding DataContext.Settings.KeyTypes, RelativeSource={RelativeSource AncestorType=Window}}"
-                                  DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding DefaultKeyType}" Width="200" HorizontalAlignment="Left" />
-                        <TextBlock Text="Notifications" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
-                        <TextBlock Text="Webhook URL for failure alerts (blank = off). Failed requests, failed deployment tasks and recoveries are POSTed as JSON with a Slack-compatible &quot;text&quot; field. Each certificate can opt out." Style="{StaticResource Hint}" TextWrapping="Wrap" />
-                        <TextBox Text="{Binding NotificationWebhookUrl}" mah:TextBoxHelper.Watermark="https://hooks.example.com/..." />
-                        <Button Content="Send Test Notification" Margin="0,8,0,0" HorizontalAlignment="Left"
-                                Command="{Binding DataContext.Settings.SendTestNotificationCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                        <Button Content="Save Settings" Margin="0,16,0,0" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left"
-                                Command="{Binding DataContext.Settings.SavePreferencesCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,12,16">
+                    <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+                        <Border Style="{StaticResource Card}" DataContext="{Binding DataContext.Appearance, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <DockPanel>
+                                <ComboBox DockPanel.Dock="Right" ItemsSource="{Binding Themes}" DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding Theme}"
+                                          Width="200" VerticalAlignment="Center" AutomationProperties.Name="App theme" />
+                                <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE790;" FontSize="18" Margin="0,0,16,0" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="App theme" />
+                                    <TextBlock Text="Light, dark, or follow the Windows setting. Applies to this app on this computer." Style="{StaticResource Cm.Caption}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <StackPanel DataContext="{Binding Preferences}">
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Renewals" Style="{StaticResource GroupTitle}" />
+                                    <TextBlock Text="Renew certificates at" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox ItemsSource="{Binding DataContext.Settings.RenewalModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding RenewalIntervalMode}" Width="340" HorizontalAlignment="Left" />
+                                    <TextBlock Text="Days before expiry (short-lived certificates renew at one third of their lifetime)" Style="{StaticResource FieldLabel}" />
+                                    <mah:NumericUpDown Value="{Binding RenewalIntervalDays}" Minimum="1" Maximum="60" Width="150" HorizontalAlignment="Left" />
+                                    <TextBlock Text="Percentage of lifetime (e.g. 75 renews a 90-day certificate after about 67 days)" Style="{StaticResource FieldLabel}" />
+                                    <mah:NumericUpDown Value="{Binding RenewalLifetimePercentage}" Minimum="1" Maximum="99" Width="150" HorizontalAlignment="Left" />
+                                    <TextBlock Text="A per-certificate &quot;renew N days before expiry&quot; value overrides both." Style="{StaticResource Cm.Caption}" Margin="0,6,0,0" />
+                                    <TextBlock Text="Check for renewals every (minutes)" Style="{StaticResource FieldLabel}" />
+                                    <mah:NumericUpDown Value="{Binding RenewalCheckIntervalMinutes}" Minimum="5" Maximum="1440" Width="150" HorizontalAlignment="Left" />
+                                    <TextBlock Text="Maximum renewals per run (0 = unlimited)" Style="{StaticResource FieldLabel}" />
+                                    <mah:NumericUpDown Value="{Binding MaxRenewalRequests}" Minimum="0" Maximum="1000" Width="150" HorizontalAlignment="Left" />
+                                    <TextBlock Text="DNS propagation check: wait up to (seconds) for TXT records on authoritative name servers (0 = off)" Style="{StaticResource FieldLabel}" />
+                                    <mah:NumericUpDown Value="{Binding DnsPropagationCheckSeconds}" Minimum="0" Maximum="3600" Width="150" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="HTTP challenge server" Style="{StaticResource GroupTitle}" Margin="0,0,0,6" />
+                                    <mah:ToggleSwitch Content="Enable built-in HTTP challenge server (http-01)" IsOn="{Binding EnableHttpChallengeServer}" />
+                                    <TextBlock Text="Listener prefix (http.sys URL; shares port 80 with IIS)" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding HttpChallengeServerPrefix}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Storage" Style="{StaticResource GroupTitle}" />
+                                    <TextBlock Text="Certificate store folder" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding CertificateStorePath}" />
+                                    <TextBlock Text="Default key type (used by certificates whose key type is &quot;Instance default&quot;)" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox ItemsSource="{Binding DataContext.Settings.KeyTypes, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              DisplayMemberPath="Title" SelectedValuePath="Value" SelectedValue="{Binding DefaultKeyType}" Width="220" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Notifications" Style="{StaticResource GroupTitle}" />
+                                    <TextBlock Text="Webhook URL for failure alerts (blank = off). Failed requests, failed deployment tasks and recoveries are POSTed as JSON with a Slack-compatible &quot;text&quot; field. Each certificate can opt out." Style="{StaticResource Hint}" />
+                                    <TextBox Text="{Binding NotificationWebhookUrl}" mah:TextBoxHelper.Watermark="https://hooks.example.com/..." />
+                                    <Button Content="Send test notification" Margin="0,12,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding DataContext.Settings.SendTestNotificationCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </StackPanel>
+                            </Border>
+                            <Button Content="Save settings" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                    Command="{Binding DataContext.Settings.SavePreferencesCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Certificate Authorities -->
-            <TabItem Header="Certificate Authorities">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="16,4">
+            <TabItem Header="Certificate authorities">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,12,16">
+                    <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Text="ACME Accounts" Style="{StaticResource SectionTitle}" />
-                            <DataGrid ItemsSource="{Binding Accounts}" AutoGenerateColumns="False" IsReadOnly="True" MinHeight="120">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="CA" Binding="{Binding CertificateAuthorityId}" />
-                                    <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="*" />
-                                    <DataGridCheckBoxColumn Header="Staging" Binding="{Binding IsStagingAccount}" />
-                                    <DataGridTemplateColumn>
-                                        <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate><Button Content="Remove" Command="{Binding DataContext.Settings.RemoveAccountCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
-                                        </DataGridTemplateColumn.CellTemplate>
-                                    </DataGridTemplateColumn>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                            <TextBlock Text="Custom ACME CA" Style="{StaticResource SectionTitle}" Margin="0,16,0,4" />
-                            <TextBlock Text="Add any ACME (RFC 8555) CA, e.g. an internal step-ca or a commercial ACME endpoint." Style="{StaticResource Hint}" />
-                            <TextBlock Text="Title" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding CustomCaTitle}" />
-                            <TextBlock Text="Production directory URL" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding CustomCaDirectory}" mah:TextBoxHelper.Watermark="https://ca.example.com/acme/directory" />
-                            <TextBlock Text="Staging directory URL (optional)" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding CustomCaStaging}" />
-                            <CheckBox Content="Allow untrusted TLS certificate on the ACME endpoint (test/internal CAs only)" IsChecked="{Binding CustomCaUntrustedTls}" Margin="0,8" />
-                            <Button Content="Add Custom CA" Style="{StaticResource ToolButton}" HorizontalAlignment="Left" Command="{Binding AddCustomCaCommand}" />
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="ACME accounts" Style="{StaticResource GroupTitle}" Margin="0,0,0,8" />
+                                    <DataGrid ItemsSource="{Binding Accounts}" AutoGenerateColumns="False" IsReadOnly="True" MinHeight="120">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="CA" Binding="{Binding CertificateAuthorityId}" />
+                                            <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="*" />
+                                            <DataGridCheckBoxColumn Header="Staging" Binding="{Binding IsStagingAccount}" />
+                                            <DataGridTemplateColumn>
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate><Button Content="Remove" Style="{StaticResource SubtleButton}" MinHeight="28" Padding="8,3" Command="{Binding DataContext.Settings.RemoveAccountCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Custom ACME CA" Style="{StaticResource GroupTitle}" />
+                                    <TextBlock Text="Add any ACME (RFC 8555) CA, e.g. an internal step-ca or a commercial ACME endpoint." Style="{StaticResource Hint}" />
+                                    <TextBlock Text="Title" Style="{StaticResource FieldLabel}" Margin="0,0,0,6" />
+                                    <TextBox Text="{Binding CustomCaTitle}" />
+                                    <TextBlock Text="Production directory URL" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding CustomCaDirectory}" mah:TextBoxHelper.Watermark="https://ca.example.com/acme/directory" />
+                                    <TextBlock Text="Staging directory URL (optional)" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding CustomCaStaging}" />
+                                    <CheckBox Content="Allow untrusted TLS certificate on the ACME endpoint (test/internal CAs only)" IsChecked="{Binding CustomCaUntrustedTls}" Margin="0,12" />
+                                    <Button Content="Add custom CA" HorizontalAlignment="Left" Command="{Binding AddCustomCaCommand}" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Register ACME Account" Style="{StaticResource SectionTitle}" />
-                            <TextBlock Text="Certificate Authority" Style="{StaticResource FieldLabel}" />
-                            <ComboBox ItemsSource="{Binding Authorities}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedAuthority}" />
-                            <TextBlock Text="{Binding SelectedAuthority.Description}" Style="{StaticResource Hint}" Margin="0,4,0,4" />
-                            <TextBlock Text="Email address" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding AccountEmail}" />
-                            <mah:ToggleSwitch Content="Staging (test) account" IsOn="{Binding AccountStaging}" Margin="0,6,0,0" />
-                            <StackPanel Visibility="{Binding SelectedAuthority.RequiresExternalAccountBinding, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="{Binding SelectedAuthority.EabInstructions}" Style="{StaticResource Hint}" Margin="0,6,0,0" />
-                                <TextBlock Text="EAB Key Id" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding EabKeyId}" />
-                                <TextBlock Text="EAB HMAC Key" Style="{StaticResource FieldLabel}" />
-                                <TextBox Text="{Binding EabKey}" />
+                        <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="Register ACME account" Style="{StaticResource GroupTitle}" />
+                                <TextBlock Text="Certificate Authority" Style="{StaticResource FieldLabel}" />
+                                <ComboBox ItemsSource="{Binding Authorities}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedAuthority}" />
+                                <TextBlock Text="{Binding SelectedAuthority.Description}" Style="{StaticResource Cm.Caption}" Margin="0,6,0,0" />
+                                <TextBlock Text="Email address" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding AccountEmail}" />
+                                <mah:ToggleSwitch Content="Staging (test) account" IsOn="{Binding AccountStaging}" Margin="0,10,0,0" />
+                                <StackPanel Visibility="{Binding SelectedAuthority.RequiresExternalAccountBinding, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding SelectedAuthority.EabInstructions}" Style="{StaticResource Cm.Caption}" Margin="0,8,0,0" />
+                                    <TextBlock Text="EAB Key Id" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding EabKeyId}" />
+                                    <TextBlock Text="EAB HMAC Key" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding EabKey}" />
+                                </StackPanel>
+                                <CheckBox IsChecked="{Binding AccountAgree}" Content="I agree to the CA's terms and conditions" Margin="0,12" />
+                                <Button Content="Register account" Command="{Binding AddAccountCommand}" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" />
                             </StackPanel>
-                            <CheckBox IsChecked="{Binding AccountAgree}" Content="I agree to the CA's terms and conditions" Margin="0,10" />
-                            <Button Content="Register Account" Command="{Binding AddAccountCommand}" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" />
-                        </StackPanel>
+                        </Border>
                     </Grid>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Stored Credentials -->
-            <TabItem Header="Stored Credentials">
-                <Grid Margin="16,4">
+            <TabItem Header="Stored credentials">
+                <Grid Margin="0,16,12,16">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Stored Credentials" Style="{StaticResource SectionTitle}" />
-                        <TextBlock DockPanel.Dock="Top" Text="API keys and passwords used by DNS providers and tasks. Encrypted with Windows DPAPI on this machine and never shown again." Style="{StaticResource Hint}" />
-                        <DataGrid ItemsSource="{Binding Credentials}" AutoGenerateColumns="False" IsReadOnly="True">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" />
-                                <DataGridTextColumn Header="Type" Binding="{Binding ProviderType}" />
-                                <DataGridTextColumn Header="Created" Binding="{Binding DateCreated, StringFormat=d}" />
-                                <DataGridTemplateColumn>
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate><Button Content="Delete" Command="{Binding DataContext.Settings.DeleteCredentialCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                        <StackPanel>
-                            <TextBlock Text="Add Credential" Style="{StaticResource SectionTitle}" />
-                            <TextBlock Text="Type" Style="{StaticResource FieldLabel}" />
-                            <ComboBox ItemsSource="{Binding CredentialTypes}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedCredentialType}" IsTextSearchEnabled="True" />
-                            <TextBlock Text="Title" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding CredentialTitle}" Margin="0,0,0,8" />
-                            <ItemsControl ItemsSource="{Binding CredentialFields}" />
-                            <Button Content="Save Credential" Command="{Binding AddCredentialCommand}" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </ScrollViewer>
+                    <Border Style="{StaticResource Card}" Margin="0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Stored credentials" Style="{StaticResource GroupTitle}" />
+                            <TextBlock DockPanel.Dock="Top" Text="API keys and passwords used by DNS providers and tasks. Encrypted with Windows DPAPI on this machine and never shown again." Style="{StaticResource Hint}" />
+                            <DataGrid ItemsSource="{Binding Credentials}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*" />
+                                    <DataGridTextColumn Header="Type" Binding="{Binding ProviderType}" />
+                                    <DataGridTextColumn Header="Created" Binding="{Binding DateCreated, StringFormat=d}" />
+                                    <DataGridTemplateColumn>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate><Button Content="Delete" Style="{StaticResource SubtleButton}" MinHeight="28" Padding="8,3" Command="{Binding DataContext.Settings.DeleteCredentialCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" /></DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0" VerticalAlignment="Top">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Add credential" Style="{StaticResource GroupTitle}" />
+                                <TextBlock Text="Type" Style="{StaticResource FieldLabel}" />
+                                <ComboBox ItemsSource="{Binding CredentialTypes}" DisplayMemberPath="Title" SelectedItem="{Binding SelectedCredentialType}" IsTextSearchEnabled="True" />
+                                <TextBlock Text="Title" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding CredentialTitle}" Margin="0,0,0,12" />
+                                <ItemsControl ItemsSource="{Binding CredentialFields}" />
+                                <Button Content="Save credential" Command="{Binding AddCredentialCommand}" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
                 </Grid>
             </TabItem>
 
             <!-- Updates -->
             <TabItem Header="Updates">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="16,4" MaxWidth="620" HorizontalAlignment="Left"
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,12,16">
+                    <StackPanel MaxWidth="760" HorizontalAlignment="Left"
                                 DataContext="{Binding DataContext.Updates, RelativeSource={RelativeSource AncestorType=Window}}">
-                        <TextBlock Text="Updates" Style="{StaticResource SectionTitle}" />
-                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="14" />
-                        <TextBlock Text="{Binding LastCheckedText}" Style="{StaticResource Hint}" />
-                        <TextBlock Text="{Binding Status.Message}" TextWrapping="Wrap" Margin="0,6,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                            <Button Content="Check for Updates" Style="{StaticResource ToolButton}" Command="{Binding CheckCommand}" />
-                            <Button Content="Install Update" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}"
-                                    Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
-                            <Button Content="Release Notes" Style="{StaticResource ToolButton}" Command="{Binding OpenReleaseNotesCommand}" />
-                            <mah:ProgressRing IsActive="{Binding IsWorking}" Width="20" Height="20" Margin="10,0" />
-                        </StackPanel>
-                        <TextBlock Text="This copy was not installed with the CertMaster installer, so it cannot update itself." Style="{StaticResource Hint}" Foreground="OrangeRed"
-                                   Visibility="{Binding Status.CanInstall, Converter={StaticResource InverseBoolToVis}}" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="20" Background="{DynamicResource Cm.AccentSubtle}" Margin="0,0,16,0" VerticalAlignment="Top">
+                                        <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE895;" FontSize="18" Foreground="{DynamicResource Cm.AccentText}" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Style="{StaticResource Cm.BodyStrong}" FontSize="16" />
+                                        <TextBlock Text="{Binding LastCheckedText}" Style="{StaticResource Cm.Caption}" Margin="0,2,0,0" />
+                                        <TextBlock Text="{Binding Status.Message}" TextWrapping="Wrap" Foreground="{DynamicResource Cm.TextSecondary}" Margin="0,6,0,0"
+                                                   Visibility="{Binding Status.Message, Converter={StaticResource NullCollapsed}}" />
+                                    </StackPanel>
+                                </DockPanel>
+                                <StackPanel Orientation="Horizontal" Margin="56,14,0,0">
+                                    <Button Content="Install update" Style="{StaticResource PrimaryToolButton}" Command="{Binding InstallCommand}" Margin="0,0,8,0"
+                                            Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}" />
+                                    <Button Content="Check for updates" Command="{Binding CheckCommand}" Margin="0,0,8,0" />
+                                    <Button Content="Release notes" Style="{StaticResource SubtleButton}" Command="{Binding OpenReleaseNotesCommand}" />
+                                    <mah:ProgressRing IsActive="{Binding IsWorking}" Width="20" Height="20" Margin="12,0" Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
+                                <Border Background="{DynamicResource Cm.CautionBackground}" CornerRadius="4" Padding="12,8" Margin="56,14,0,0"
+                                        Visibility="{Binding Status.CanInstall, Converter={StaticResource InverseBoolToVis}}">
+                                    <DockPanel>
+                                        <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE7BA;" Foreground="{DynamicResource Cm.Caution}" Margin="0,0,10,0" />
+                                        <TextBlock Text="This copy was not installed with the CertMaster installer, so it cannot update itself." TextWrapping="Wrap" />
+                                    </DockPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Text="Automatic Updates" Style="{StaticResource SectionTitle}" Margin="0,20,0,4" />
-                        <mah:ToggleSwitch Content="Check for updates automatically" IsOn="{Binding Settings.CheckForUpdates}" />
-                        <mah:ToggleSwitch Content="Install updates automatically" IsOn="{Binding Settings.InstallAutomatically}" IsEnabled="{Binding Settings.CheckForUpdates}" />
-                        <mah:ToggleSwitch Content="Include pre-release versions" IsOn="{Binding Settings.IncludePrereleases}" />
-                        <TextBlock Text="Check every (hours)" Style="{StaticResource FieldLabel}" />
-                        <mah:NumericUpDown Value="{Binding Settings.CheckIntervalHours}" Minimum="1" Maximum="168" Width="140" HorizontalAlignment="Left" />
-                        <TextBlock Text="Install automatically only between these hours (local time; the same hour for both means any time)" Style="{StaticResource FieldLabel}" TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal">
-                            <mah:NumericUpDown Value="{Binding Settings.InstallWindowStartHour}" Minimum="0" Maximum="23" Width="110" />
-                            <TextBlock Text="to" VerticalAlignment="Center" Margin="8,0" />
-                            <mah:NumericUpDown Value="{Binding Settings.InstallWindowEndHour}" Minimum="0" Maximum="23" Width="110" />
-                        </StackPanel>
-                        <TextBlock Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                   Text="The agent service downloads the installer from GitHub Releases, checks it against the SHA-256 digest GitHub publishes, and runs it silently. It waits for running certificate requests to finish, and starts the service again even if setup fails." />
-                        <Button Content="Save Update Settings" Margin="0,12,0,0" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}" />
-                        <TextBlock Text="{Binding Message}" Foreground="{DynamicResource MahApps.Brushes.Accent}" Margin="0,8,0,0" TextWrapping="Wrap" />
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="Automatic updates" Style="{StaticResource GroupTitle}" Margin="0,0,0,6" />
+                                <mah:ToggleSwitch Content="Check for updates automatically" IsOn="{Binding Settings.CheckForUpdates}" />
+                                <mah:ToggleSwitch Content="Install updates automatically" IsOn="{Binding Settings.InstallAutomatically}" IsEnabled="{Binding Settings.CheckForUpdates}" />
+                                <mah:ToggleSwitch Content="Include pre-release versions" IsOn="{Binding Settings.IncludePrereleases}" />
+                                <TextBlock Text="Check every (hours)" Style="{StaticResource FieldLabel}" />
+                                <mah:NumericUpDown Value="{Binding Settings.CheckIntervalHours}" Minimum="1" Maximum="168" Width="150" HorizontalAlignment="Left" />
+                                <TextBlock Text="Install automatically only between these hours (local time; the same hour for both means any time)" Style="{StaticResource FieldLabel}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <mah:NumericUpDown Value="{Binding Settings.InstallWindowStartHour}" Minimum="0" Maximum="23" Width="120" />
+                                    <TextBlock Text="to" VerticalAlignment="Center" Margin="12,0" />
+                                    <mah:NumericUpDown Value="{Binding Settings.InstallWindowEndHour}" Minimum="0" Maximum="23" Width="120" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Cm.Caption}" Margin="0,12,0,0"
+                                           Text="The agent service downloads the installer from GitHub Releases, checks it against the SHA-256 digest GitHub publishes, and runs it silently. It waits for running certificate requests to finish, and starts the service again even if setup fails." />
+                                <Button Content="Save update settings" Margin="0,16,0,0" Style="{StaticResource PrimaryToolButton}" HorizontalAlignment="Left" Command="{Binding SaveSettingsCommand}" />
+                                <TextBlock Text="{Binding Message}" Foreground="{DynamicResource Cm.AccentText}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding Message, Converter={StaticResource NullCollapsed}}" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- Management Hub -->
-            <TabItem Header="Management Hub">
-                <StackPanel Margin="16,4" MaxWidth="600" HorizontalAlignment="Left">
-                    <TextBlock Text="Management Hub" Style="{StaticResource SectionTitle}" />
-                    <TextBlock Text="Join this server to a CertMaster Management Hub to manage its certificates centrally. The agent connects outbound to the hub; no inbound port is needed." Style="{StaticResource Hint}" />
-                    <TextBlock Text="Status" Style="{StaticResource FieldLabel}" />
-                    <TextBlock Text="{Binding HubStatus}" TextWrapping="Wrap" Margin="0,0,0,10" />
-                    <TextBlock Text="Hub URL" Style="{StaticResource FieldLabel}" />
-                    <TextBox Text="{Binding HubUrl}" mah:TextBoxHelper.Watermark="https://hub.example.com" />
-                    <TextBlock Text="Joining key" Style="{StaticResource FieldLabel}" />
-                    <TextBox Text="{Binding JoiningKey}" Margin="0,0,0,10" />
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Join Hub" Command="{Binding JoinHubCommand}" Style="{StaticResource PrimaryToolButton}" />
-                        <Button Content="Leave Hub" Command="{Binding LeaveHubCommand}" Style="{StaticResource ToolButton}" />
-                        <Button Content="Refresh" Command="{Binding RefreshHubCommand}" Style="{StaticResource ToolButton}" />
-                    </StackPanel>
-                </StackPanel>
+            <TabItem Header="Management hub">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,16,12,16">
+                    <Border Style="{StaticResource Card}" MaxWidth="760" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <StackPanel>
+                            <TextBlock Text="Management hub" Style="{StaticResource GroupTitle}" />
+                            <TextBlock Text="Join this server to a CertMaster Management Hub to manage its certificates centrally. The agent connects outbound to the hub; no inbound port is needed." Style="{StaticResource Hint}" />
+                            <Border Background="{DynamicResource Cm.CardBackgroundSecondary}" CornerRadius="4" Padding="12,8" Margin="0,0,0,4">
+                                <DockPanel>
+                                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE968;" Foreground="{DynamicResource Cm.TextSecondary}" Margin="0,0,10,0" />
+                                    <TextBlock Text="{Binding HubStatus}" TextWrapping="Wrap" />
+                                </DockPanel>
+                            </Border>
+                            <TextBlock Text="Hub URL" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding HubUrl}" mah:TextBoxHelper.Watermark="https://hub.example.com" />
+                            <TextBlock Text="Joining key" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding JoiningKey}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Join hub" Command="{Binding JoinHubCommand}" Style="{StaticResource PrimaryToolButton}" Margin="0,0,8,0" />
+                                <Button Content="Leave hub" Command="{Binding LeaveHubCommand}" Margin="0,0,8,0" />
+                                <Button Content="Refresh" Command="{Binding RefreshHubCommand}" Style="{StaticResource SubtleButton}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>
