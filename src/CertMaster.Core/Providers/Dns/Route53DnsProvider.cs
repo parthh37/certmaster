@@ -15,7 +15,7 @@ public class Route53DnsProvider : DnsProviderBase
     {
         Id = "DNS01.API.Route53",
         Title = "Amazon Route 53 DNS API",
-        Description = "Validates via AWS Route 53 using an IAM access key (needs route53:ListHostedZones, ListResourceRecordSets, ChangeResourceRecordSets, GetChange). Leave the keys blank to use the default AWS credential chain (environment, profile or instance role).",
+        Description = "Validates via AWS Route 53 using an IAM access key (needs route53:ListHostedZones, GetHostedZone, ListResourceRecordSets, ChangeResourceRecordSets and GetChange). Leave the credential empty to use the default AWS credential chain of the service account (environment, profile or EC2 instance role).",
         HelpUrl = "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/access-control-managing-permissions.html",
         ChallengeType = ChallengeTypes.Dns01,
         PropagationDelaySeconds = 30,
@@ -27,7 +27,75 @@ public class Route53DnsProvider : DnsProviderBase
             new ProviderParameter { Key = "session_token", Name = "Session Token (optional, temporary credentials)", Type = OptionType.Password, IsCredential = true },
             new ProviderParameter { Key = "region", Name = "Region (optional)", Value = "us-east-1", Description = "AWS partition endpoint region, e.g. us-east-1 (commercial), cn-north-1 (China) or us-gov-west-1 (GovCloud)." },
             new ProviderParameter { Key = "wait_insync", Name = "Wait for change to be INSYNC", Type = OptionType.Boolean, Value = "true", Description = "Wait until Route 53 reports the change has reached all of its name servers." },
+        },
+        SetupGuide = SetupGuideContent,
+    };
+
+    /// <summary>Least-privilege IAM policy for this provider, shown in the setup guide (unit tested to stay valid JSON).</summary>
+    public const string IamPolicyJson = """
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CertMasterFindZonesAndChanges",
+              "Effect": "Allow",
+              "Action": ["route53:ListHostedZones", "route53:GetChange"],
+              "Resource": "*"
+            },
+            {
+              "Sid": "CertMasterEditTxtRecords",
+              "Effect": "Allow",
+              "Action": ["route53:GetHostedZone", "route53:ListResourceRecordSets", "route53:ChangeResourceRecordSets"],
+              "Resource": "arn:aws:route53:::hostedzone/*"
+            }
+          ]
         }
+        """;
+
+    private static readonly ProviderSetupGuide SetupGuideContent = new()
+    {
+        Title = "How to create an AWS IAM access key for Route 53",
+        Intro = "CertMaster calls the Route 53 API directly, so the AWS CLI is not required. You only need an IAM access key that is allowed to edit TXT records in your hosted zones.",
+        Steps =
+        {
+            "Sign in to the AWS console and open IAM > Policies > Create policy. Choose the JSON editor, paste the IAM policy below and name it CertMasterRoute53. To limit it to one domain, replace hostedzone/* with hostedzone/<your hosted zone id>.",
+            "Open IAM > Users > Create user. Name it, for example, certmaster-dns, leave console access off, choose \"Attach policies directly\" and select CertMasterRoute53.",
+            "Open the new user > Security credentials > Create access key. Choose \"Application running outside AWS\", then copy the Access key ID and the Secret access key (AWS shows the secret only once).",
+            "Back here, click Add next to Credentials, paste both keys and save. The new credential is selected for you.",
+            "Click Test to check that CertMaster can find your hosted zone. On an EC2 instance whose IAM role has this policy you can leave the credential empty instead.",
+        },
+        Snippets =
+        {
+            new() { Title = "IAM policy (JSON)", Text = IamPolicyJson },
+            new()
+            {
+                Title = "Optional: install the latest AWS CLI v2",
+                Description = "Only needed if you prefer to create the user from a terminal. Run in PowerShell, then run 'aws configure' with an administrator access key.",
+                Text = """
+                    winget install --exact --id Amazon.AWSCLI
+                    aws --version
+                    """,
+            },
+            new()
+            {
+                Title = "Optional: create the user with the AWS CLI (PowerShell)",
+                Description = "Save the IAM policy above as certmaster-route53.json in the current folder first. The last command prints the new access key.",
+                Text = """
+                    $account = aws sts get-caller-identity --query Account --output text
+                    aws iam create-policy --policy-name CertMasterRoute53 --policy-document file://certmaster-route53.json
+                    aws iam create-user --user-name certmaster-dns
+                    aws iam attach-user-policy --user-name certmaster-dns --policy-arn "arn:aws:iam::${account}:policy/CertMasterRoute53"
+                    aws iam create-access-key --user-name certmaster-dns
+                    """,
+            },
+        },
+        Links =
+        {
+            new() { Title = "Download the latest AWS CLI for Windows", Url = "https://awscli.amazonaws.com/AWSCLIV2.msi" },
+            new() { Title = "AWS CLI install guide", Url = "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" },
+            new() { Title = "Creating an IAM user", Url = "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html" },
+            new() { Title = "Route 53 API permissions reference", Url = "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/r53-api-permissions-ref.html" },
+        },
     };
 
     // ---------- pure helpers (unit tested) ----------
@@ -76,7 +144,7 @@ public class Route53DnsProvider : DnsProviderBase
             var hint = ex.ErrorCode switch
             {
                 "InvalidClientTokenId" or "SignatureDoesNotMatch" or "UnrecognizedClientException" => " Check the Access Key ID and Secret Access Key.",
-                "AccessDenied" or "AccessDeniedException" => " The IAM user/role needs route53:ListHostedZones, route53:ListResourceRecordSets, route53:ChangeResourceRecordSets and route53:GetChange.",
+                "AccessDenied" or "AccessDeniedException" => " The IAM user/role needs route53:ListHostedZones, route53:GetHostedZone, route53:ListResourceRecordSets, route53:ChangeResourceRecordSets and route53:GetChange (the setup guide has a ready-made policy).",
                 "NoSuchHostedZone" => " The hosted zone id was not found; check the zone id or clear it to auto-detect.",
                 "Throttling" or "PriorRequestNotComplete" => " Route 53 is throttling requests; retry shortly.",
                 "ExpiredToken" => " The session token has expired.",

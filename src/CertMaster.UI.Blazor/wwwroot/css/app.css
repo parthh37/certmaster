@@ -183,6 +183,9 @@ html, body {
 .cm-log .ERR { color: var(--mud-palette-error); }
 .cm-log .WRN { color: var(--mud-palette-warning); }
 .cm-key { word-break: break-all; }
+.cm-guide-steps { margin: 0 0 0 1.25rem; padding: 0; }
+.cm-guide-steps li { margin-bottom: 6px; }
+.cm-guide-snippet { margin: 6px 0 0; padding: 8px 12px; overflow-x: auto; white-space: pre; background: var(--mud-palette-background-gray); border: 1px solid var(--mud-palette-lines-default); border-radius: var(--cm-radius-control); }
 
 /* Thin scroll bars */
 * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--mud-palette-text-primary) 35%, transparent) transparent; }

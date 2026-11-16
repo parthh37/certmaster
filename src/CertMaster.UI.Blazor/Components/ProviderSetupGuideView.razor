@@ -1,0 +1,52 @@
+@* Collapsible step-by-step setup instructions for a provider (e.g. creating the IAM user for Route 53). *@
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<MudExpansionPanels Outlined="true" Class="mt-2">
+    <MudExpansionPanel>
+        <TitleContent>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Outlined.HelpOutline" Color="Color.Primary" Size="Size.Small" />
+                <MudText>@Guide.Title</MudText>
+            </MudStack>
+        </TitleContent>
+        <ChildContent>
+            @if (!string.IsNullOrEmpty(Guide.Intro)) { <MudText Typo="Typo.body2" Class="mb-3">@Guide.Intro</MudText> }
+            <ol class="cm-guide-steps">
+                @foreach (var step in Guide.Steps) { <li><MudText Typo="Typo.body2">@step</MudText></li> }
+            </ol>
+            @foreach (var s in Guide.Snippets)
+            {
+                <div class="mt-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">@s.Title</MudText>
+                        <MudSpacer />
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Outlined.ContentCopy" OnClick="@(() => Copy(s.Text))">Copy</MudButton>
+                    </MudStack>
+                    @if (!string.IsNullOrEmpty(s.Description)) { <MudText Typo="Typo.caption" Class="d-block">@s.Description</MudText> }
+                    <pre class="cm-mono cm-guide-snippet">@s.Text</pre>
+                </div>
+            }
+            @if (Guide.Links.Count > 0)
+            {
+                <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-3">
+                    @foreach (var l in Guide.Links)
+                    {
+                        <MudButton Href="@l.Url" Target="_blank" Rel="noopener" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.OpenInNew">@l.Title</MudButton>
+                    }
+                </MudStack>
+            }
+        </ChildContent>
+    </MudExpansionPanel>
+</MudExpansionPanels>
+
+@code {
+    [Parameter, EditorRequired] public ProviderSetupGuide Guide { get; set; } = new();
+
+    private async Task Copy(string text)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); Snackbar.Add("Copied to clipboard", Severity.Success); }
+        catch { Snackbar.Add("Copy failed: select the text and copy it manually.", Severity.Warning); }
+    }
+}
