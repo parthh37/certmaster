@@ -285,6 +285,45 @@ public partial class MainViewModel : ObservableObject
         if (dlg.ShowDialog() == true && dlg.Selected != null) Editor.AddTask(dlg.Selected, pre);
     }
 
+    /// <summary>Opens the "Add credential" dialog for the type a picker needs, saves it on the agent and selects it.</summary>
+    [RelayCommand]
+    private async Task AddCredentialAsync(ICredentialPicker? picker)
+    {
+        if (picker?.RequiredCredentialType is not { } providerType) return;
+        try
+        {
+            var type = (await _client.GetCredentialTypesAsync()).FirstOrDefault(t => t.ProviderType == providerType);
+            if (type == null) { MessageBox.Show($"The agent has no credential type '{providerType}'.", "Add credential"); return; }
+            var dlg = new Views.CredentialEditorWindow(type) { Owner = Application.Current.MainWindow };
+            if (dlg.ShowDialog() != true) return;
+            var saved = await _client.UpdateCredentialAsync(new StoredCredential
+            {
+                ProviderType = type.ProviderType,
+                Title = dlg.CredentialTitle,
+                Secret = JsonDefaults.Serialize(dlg.Values),
+            });
+            Catalog.Credentials = await _client.GetCredentialsAsync();
+            picker.OnCredentialAdded(saved);
+            StatusText = $"Credential '{saved.Title}' saved.";
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Add credential failed"); }
+    }
+
+    [RelayCommand]
+    private void OpenLink(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Open link"); }
+    }
+
+    [RelayCommand]
+    private void CopyText(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try { Clipboard.SetText(text); } catch (Exception ex) { MessageBox.Show(ex.Message, "Copy"); }
+    }
+
     [RelayCommand]
     private async Task RunTaskAsync(DeploymentTaskViewModel task)
     {

@@ -38,8 +38,16 @@
                     </StackPanel>
                     <StackPanel Visibility="{Binding NeedsCredential, Converter={StaticResource BoolToVis}}">
                         <TextBlock Text="Credentials" Style="{StaticResource FieldLabel}" />
-                        <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}"
-                                  mah:TextBoxHelper.Watermark="Select stored credential (add in Settings)" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Margin="6,0,0,0" ToolTip="Add a new credential for this task" AutomationProperties.Name="Add credential"
+                                    Command="{Binding DataContext.AddCredentialCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE710;" FontSize="14" /><TextBlock Text="Add" /></StackPanel>
+                            </Button>
+                            <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}"
+                                      mah:TextBoxHelper.Watermark="Select a stored credential" />
+                        </DockPanel>
+                        <TextBlock Text="No stored credential of this type yet. Click Add to create one." Style="{StaticResource Cm.Caption}" Margin="0,4,0,0"
+                                   Visibility="{Binding HasNoCredentials, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                     <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,12,0,0" />
                     <WrapPanel Margin="0,4,0,0">
@@ -266,10 +274,73 @@
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding NeedsCredential, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="Credentials" Style="{StaticResource FieldLabel}" Margin="0,0,0,6" />
-                                                <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}" />
+                                                <DockPanel>
+                                                    <Button DockPanel.Dock="Right" Margin="6,0,0,0" ToolTip="Add a new credential for this provider" AutomationProperties.Name="Add credential"
+                                                            Command="{Binding DataContext.AddCredentialCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE710;" FontSize="14" /><TextBlock Text="Add" /></StackPanel>
+                                                    </Button>
+                                                    <ComboBox ItemsSource="{Binding Credentials}" DisplayMemberPath="Title" SelectedValuePath="StorageKey" SelectedValue="{Binding CredentialKey}"
+                                                              mah:TextBoxHelper.Watermark="Select a stored credential" />
+                                                </DockPanel>
                                             </StackPanel>
                                         </UniformGrid>
+                                        <Border Style="{StaticResource Cm.InfoBar}" Margin="0,10,0,0" Visibility="{Binding HasNoCredentials, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock TextWrapping="Wrap" Text="No stored credential for this provider yet. Click Add next to Credentials to enter your API key; it is saved encrypted on this machine and selected automatically." />
+                                        </Border>
                                         <TextBlock Text="{Binding ProviderDescription}" Style="{StaticResource Cm.Caption}" Margin="0,8,0,0" />
+                                        <!-- Provider setup guide (e.g. how to create the IAM user for Route 53) -->
+                                        <Expander Style="{StaticResource Cm.CardExpander}" Margin="0,12,0,0" Visibility="{Binding HasSetupGuide, Converter={StaticResource BoolToVis}}">
+                                            <Expander.Header>
+                                                <DockPanel>
+                                                    <TextBlock Style="{StaticResource Cm.Glyph}" Text="&#xE897;" Foreground="{DynamicResource Cm.AccentText}" Margin="0,0,12,0" />
+                                                    <TextBlock Text="{Binding SetupGuide.Title}" TextTrimming="CharacterEllipsis" />
+                                                </DockPanel>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,12,0,0">
+                                                <TextBlock Text="{Binding SetupGuide.Intro}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="{Binding SetupGuide.Intro, Converter={StaticResource NullCollapsed}}" />
+                                                <ItemsControl ItemsSource="{Binding SetupSteps}" IsTabStop="False">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <DockPanel Margin="0,0,0,10">
+                                                                <Border DockPanel.Dock="Left" Width="24" Height="24" CornerRadius="12" Background="{DynamicResource Cm.AccentSubtle}" Margin="0,0,12,0" VerticalAlignment="Top">
+                                                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Cm.AccentText}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <TextBlock Text="{Binding Value}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                                            </DockPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <ItemsControl ItemsSource="{Binding SetupGuide.Snippets}" IsTabStop="False">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Margin="0,8,0,4">
+                                                                <DockPanel>
+                                                                    <Button DockPanel.Dock="Right" Style="{StaticResource SubtleButton}" MinHeight="28" Padding="8,3" ToolTip="Copy to clipboard"
+                                                                            Command="{Binding DataContext.CopyTextCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Text}">
+                                                                        <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE8C8;" FontSize="13" /><TextBlock Text="Copy" /></StackPanel>
+                                                                    </Button>
+                                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource Cm.BodyStrong}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                </DockPanel>
+                                                                <TextBlock Text="{Binding Description}" Style="{StaticResource Cm.Caption}" Margin="0,2,0,0" Visibility="{Binding Description, Converter={StaticResource NullCollapsed}}" />
+                                                                <TextBox Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" FontFamily="{StaticResource Cm.FontMono}" FontSize="12" Margin="0,6,0,0"
+                                                                         TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <ItemsControl ItemsSource="{Binding SetupGuide.Links}" IsTabStop="False" Margin="0,8,0,0">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Style="{StaticResource SubtleButton}" Margin="0,0,8,8" ToolTip="{Binding Url}"
+                                                                    Command="{Binding DataContext.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Url}">
+                                                                <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Cm.ButtonGlyph}" Text="&#xE8A7;" FontSize="13" /><TextBlock Text="{Binding Title}" /></StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Expander>
                                         <TextBlock Text="Apply to domains (optional, comma separated; blank = all)" Style="{StaticResource FieldLabel}" />
                                         <TextBox Text="{Binding DomainMatch}" />
                                         <StackPanel Visibility="{Binding IsDns, Converter={StaticResource BoolToVis}}">

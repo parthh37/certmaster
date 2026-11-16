@@ -76,7 +76,15 @@ public partial class DomainOptionViewModel : ObservableObject
     public string? Comment { get; init; }
 }
 
-public partial class ChallengeConfigViewModel : ObservableObject
+/// <summary>An editor row with a stored-credential picker that the "Add credential" dialog can fill in.</summary>
+public interface ICredentialPicker
+{
+    string? RequiredCredentialType { get; }
+    /// <summary>Called after a new credential was saved and the catalog reloaded: refresh the list and select it.</summary>
+    void OnCredentialAdded(StoredCredential credential);
+}
+
+public partial class ChallengeConfigViewModel : ObservableObject, ICredentialPicker
 {
     private readonly Catalog _catalog;
     public CertRequestChallengeConfig Model { get; }
@@ -108,9 +116,21 @@ public partial class ChallengeConfigViewModel : ObservableObject
     public List<ChallengeProviderDefinition> Providers => _catalog.ChallengeProviders.Where(p => p.ChallengeType == ChallengeType).ToList();
     private ChallengeProviderDefinition? Provider => _catalog.ChallengeProviders.FirstOrDefault(p => p.Id == ProviderId);
     public string? ProviderDescription => Provider?.Description;
+    public ProviderSetupGuide? SetupGuide => Provider?.SetupGuide;
+    public bool HasSetupGuide => SetupGuide != null;
+    public List<Choice<string>> SetupSteps => SetupGuide?.Steps.Select((s, i) => new Choice<string>(s, (i + 1).ToString())).ToList() ?? new();
     public List<StoredCredential> Credentials => _catalog.Credentials.Where(c => c.ProviderType == Provider?.CredentialType).ToList();
     public bool NeedsCredential => Provider?.CredentialType != null;
+    public bool HasNoCredentials => NeedsCredential && Credentials.Count == 0;
+    public string? RequiredCredentialType => Provider?.CredentialType;
     public bool IsDns => ChallengeType == ChallengeTypes.Dns01;
+
+    public void OnCredentialAdded(StoredCredential credential)
+    {
+        OnPropertyChanged(nameof(Credentials));
+        OnPropertyChanged(nameof(HasNoCredentials));
+        CredentialKey = credential.StorageKey;
+    }
 
     partial void OnChallengeTypeChanged(string value)
     {
@@ -124,7 +144,11 @@ public partial class ChallengeConfigViewModel : ObservableObject
         RebuildParameters(Model.Parameters);
         OnPropertyChanged(nameof(Credentials));
         OnPropertyChanged(nameof(NeedsCredential));
+        OnPropertyChanged(nameof(HasNoCredentials));
         OnPropertyChanged(nameof(ProviderDescription));
+        OnPropertyChanged(nameof(SetupGuide));
+        OnPropertyChanged(nameof(HasSetupGuide));
+        OnPropertyChanged(nameof(SetupSteps));
     }
 
     private void RebuildParameters(IEnumerable<ProviderParameterSetting> current) =>
@@ -144,7 +168,7 @@ public partial class ChallengeConfigViewModel : ObservableObject
     }
 }
 
-public partial class DeploymentTaskViewModel : ObservableObject
+public partial class DeploymentTaskViewModel : ObservableObject, ICredentialPicker
 {
     private readonly Catalog _catalog;
     public DeploymentTaskConfig Model { get; }
@@ -176,13 +200,21 @@ public partial class DeploymentTaskViewModel : ObservableObject
 
     /// <summary>Credentials applicable to the selected target, or to the provider for API based tasks.</summary>
     public List<StoredCredential> Credentials => _catalog.Credentials.Where(c => c.ProviderType == RequiredCredentialType).ToList();
-    private string? RequiredCredentialType => TargetType switch
+    public string? RequiredCredentialType => TargetType switch
     {
         DeploymentContextType.SSH => "SSH",
         DeploymentContextType.WindowsNetwork or DeploymentContextType.LocalAsUser => "Windows",
         _ => Definition?.CredentialType,
     };
     public bool NeedsCredential => RequiredCredentialType != null;
+    public bool HasNoCredentials => NeedsCredential && Credentials.Count == 0;
+
+    public void OnCredentialAdded(StoredCredential credential)
+    {
+        OnPropertyChanged(nameof(Credentials));
+        OnPropertyChanged(nameof(HasNoCredentials));
+        CredentialKey = credential.StorageKey;
+    }
 
     [ObservableProperty] private string _taskName;
     [ObservableProperty] private TaskTriggerType _trigger;
@@ -197,6 +229,7 @@ public partial class DeploymentTaskViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(Credentials));
         OnPropertyChanged(nameof(NeedsCredential));
+        OnPropertyChanged(nameof(HasNoCredentials));
         OnPropertyChanged(nameof(IsSsh));
     }
 

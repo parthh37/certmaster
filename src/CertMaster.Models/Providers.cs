@@ -33,6 +33,32 @@ public abstract class ProviderDefinition
     /// <summary>Credential provider type this provider needs (matches StoredCredential.ProviderType). Null = none.</summary>
     public string? CredentialType { get; set; }
     public List<ProviderParameter> ProviderParameters { get; set; } = new();
+    /// <summary>Optional step-by-step instructions shown in the UI next to the provider (e.g. how to create an API key).</summary>
+    public ProviderSetupGuide? SetupGuide { get; set; }
+}
+
+/// <summary>How to prepare an account/API key for a provider, rendered by both the desktop app and the hub.</summary>
+public class ProviderSetupGuide
+{
+    public string Title { get; set; } = "Setup guide";
+    public string? Intro { get; set; }
+    public List<string> Steps { get; set; } = new();
+    /// <summary>Copyable blocks such as a permissions policy or CLI commands.</summary>
+    public List<ProviderGuideSnippet> Snippets { get; set; } = new();
+    public List<ProviderGuideLink> Links { get; set; } = new();
+}
+
+public class ProviderGuideSnippet
+{
+    public string Title { get; set; } = "";
+    public string? Description { get; set; }
+    public string Text { get; set; } = "";
+}
+
+public class ProviderGuideLink
+{
+    public string Title { get; set; } = "";
+    public string Url { get; set; } = "";
 }
 
 public class ChallengeProviderDefinition : ProviderDefinition
